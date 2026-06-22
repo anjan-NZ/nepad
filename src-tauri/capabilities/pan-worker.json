@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pan-worker-remote",
+  "windows": ["pan-worker"],
+  "remote": {
+    "urls": ["https://ird.gov.np/*"]
+  },
+  "permissions": ["core:default"]
+}

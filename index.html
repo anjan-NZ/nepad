@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NePad</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <div id="panel" class="panel">
+      <header class="panel-header" data-tauri-drag-region>
+        <div id="date-block" class="date-block" title="Open calendar">
+          <div id="bs-date" class="bs-date"></div>
+          <div id="ad-date" class="ad-date"></div>
+        </div>
+        <div class="day-nav">
+          <button id="day-prev" class="icon-btn" title="Previous day">&#8249;</button>
+          <button id="day-today" class="icon-btn" title="Today">&#9679;</button>
+          <button id="day-next" class="icon-btn" title="Next day">&#8250;</button>
+        </div>
+        <nav class="tabs">
+          <button class="tab-btn reorderable active" data-view="home" title="Drag to reorder">Notes</button>
+          <button class="tab-btn reorderable" data-view="calendar" title="Drag to reorder">Calendar</button>
+          <button class="tab-btn reorderable" data-view="tools" title="Drag to reorder">Tools</button>
+          <button class="tab-btn" data-view="settings">&#9881;</button>
+        </nav>
+      </header>
+
+      <button id="hide-btn" class="icon-btn hide-btn-corner" title="Hide (Win + \)">&minus;</button>
+
+      <main id="view-root" class="view-root"></main>
+    </div>
+
+    <div id="edge-strip" class="edge-strip" title="Open NePad">
+      <div class="edge-strip-bar"></div>
+    </div>
+
+    <div id="reminder-toast" class="reminder-toast">
+      <div class="reminder-toast-title">NePad reminder</div>
+      <div id="reminder-toast-text" class="reminder-toast-text"></div>
+      <div class="reminder-toast-actions">
+        <button type="button" id="reminder-toast-open" class="reminder-toast-btn">Open NePad</button>
+        <button type="button" id="reminder-toast-dismiss" class="reminder-toast-btn">Dismiss</button>
+      </div>
+    </div>
+
+    <button type="button" id="timer-toast" class="timer-toast" title="Open NePad">
+      <span id="timer-toast-text" class="timer-toast-text"></span>
+    </button>
+  </body>
+</html>
