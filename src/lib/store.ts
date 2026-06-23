@@ -26,6 +26,7 @@ export interface Settings {
   edgeStripPos: { x: number; y: number } | null;
   autoUpdateCheck: boolean;
   timerToastPos: { x: number; y: number } | null;
+  theme: "dark" | "light";
 }
 
 export interface Reminder {
@@ -39,12 +40,13 @@ const DEFAULT_SETTINGS: Settings = {
   showDualDate: true,
   autostart: false,
   tabOrder: ["home", "calendar", "tools"],
-  toolsOrder: ["timer", "converter", "pan", "tds"],
+  toolsOrder: ["converter", "pan", "tds", "vat", "timer"],
   toolsHidden: [],
   edgeStripEnabled: false,
   edgeStripPos: null,
   autoUpdateCheck: false,
   timerToastPos: null,
+  theme: "dark",
 };
 
 const EMPTY_DAY: DayData = { tasks: [], journal: "", notes: "" };

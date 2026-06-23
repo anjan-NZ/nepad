@@ -1,6 +1,6 @@
 [package]
 name = "nepad"
-version = "1.2.3"
+version = "1.2.4"
 description = "NePad - desktop day planner with Nepali date support"
 authors = ["Anjan Simkhada"]
 edition = "2021"

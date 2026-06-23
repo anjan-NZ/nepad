@@ -11,6 +11,8 @@ const KNOWN_COLUMN_ORDER = [
   "Ward",
   "Office",
   "Registration Date",
+  "Account Type",
+  "Account Status",
   "Business Names",
 ];
 
@@ -34,6 +36,13 @@ function pick(fields: Record<string, string>, ...names: string[]): string {
     if (fields[n] !== undefined && fields[n] !== "") return fields[n];
   }
   return "";
+}
+
+function pickRegistration(registration: Record<string, string>[]): { type: string; status: string } {
+  if (registration.length === 0) return { type: "", status: "" };
+  const incomeTaxRow = registration.find((r) => /income\s*tax/i.test(r["Account Type"] ?? ""));
+  const row = incomeTaxRow ?? registration[0];
+  return { type: row["Account Type"] ?? "", status: row["Status"] ?? "" };
 }
 
 function parsePanResponse(pan: string, raw: string): PanRow {
@@ -60,6 +69,8 @@ function parsePanResponse(pan: string, raw: string): PanRow {
   if (data?.status === "Found") {
     const fields: Record<string, string> = data.fields ?? {};
     const business: Record<string, string>[] = data.business ?? [];
+    const registration: Record<string, string>[] = data.registration ?? [];
+    const reg = pickRegistration(registration);
     const row: PanRow = {
       PAN: pick(fields, "PAN") || pan,
       "Name (English)": pick(fields, "Name (Eng)", "Name (English)"),
@@ -78,6 +89,8 @@ function parsePanResponse(pan: string, raw: string): PanRow {
         .join(" | "),
       Status: "Found",
     };
+    if (reg.type) row["Account Type"] = reg.type;
+    if (reg.status) row["Account Status"] = reg.status;
 
     for (const [key, value] of Object.entries(fields)) {
       if (CONSUMED_FIELD_KEYS.has(key) || !value) continue;
@@ -163,7 +176,7 @@ export function renderPan(root: HTMLElement): void {
 
       <div class="pan-single">
         <input id="pan-single-input" type="text" placeholder="9-digit PAN" maxlength="9" autocomplete="off" />
-        <button type="button" id="pan-single-go" class="conv-go-btn">Search</button>
+        <button type="button" id="pan-single-go" class="conv-go-btn" disabled>Search</button>
       </div>
       <div id="pan-single-result" class="pan-single-result"></div>
 
@@ -205,6 +218,10 @@ export function renderPan(root: HTMLElement): void {
   let chosenFilePath: string | null = null;
   let bulkResults: PanRow[] = [];
 
+  singleInput.addEventListener("input", () => {
+    singleGo.disabled = !/^\d{9}$/.test(singleInput.value.trim());
+  });
+
   function renderRow(row: PanRow): string {
     return `
       <tr>
@@ -237,7 +254,7 @@ export function renderPan(root: HTMLElement): void {
     singleGo.disabled = true;
     singleResult.innerHTML = `<div class="pan-loading">Searching...</div>`;
     const row = await searchOne(pan);
-    singleGo.disabled = false;
+    singleGo.disabled = !/^\d{9}$/.test(singleInput.value.trim());
     if (row.Status === "Found") {
       const clearance = clearanceSummary(row);
       singleResult.innerHTML = `
@@ -252,7 +269,7 @@ export function renderPan(root: HTMLElement): void {
 
   sampleBtn.addEventListener("click", async () => {
     const target = await save({
-      defaultPath: "sample_pans.xlsx",
+      defaultPath: "Sample_Format_Pan.xlsx",
       filters: [{ name: "Excel", extensions: ["xlsx"] }],
     });
     if (!target) return;
@@ -328,7 +345,7 @@ export function renderPan(root: HTMLElement): void {
 
   exportBtn.addEventListener("click", async () => {
     const target = await save({
-      defaultPath: "pan_results.xlsx",
+      defaultPath: "Extracted_Pan.xlsx",
       filters: [{ name: "Excel", extensions: ["xlsx"] }],
     });
     if (!target) return;

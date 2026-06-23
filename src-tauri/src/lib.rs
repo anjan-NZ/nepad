@@ -314,6 +314,7 @@ async fn ensure_pan_window(app: &tauri::AppHandle, state: &PanState) -> Result<(
         .title(PAN_WORKER_TITLE)
         .inner_size(900.0, 700.0)
         .visible(false)
+        .initialization_script(PAN_API_INTERCEPT_SCRIPT)
         .build()
         .map_err(|e| e.to_string())?;
     }
@@ -344,6 +345,39 @@ async fn eval_and_get(win: &tauri::WebviewWindow, script: &str) -> Result<String
     }
 }
 
+const PAN_API_INTERCEPT_SCRIPT: &str = r#"(function () {
+    window.__panApiData = null;
+    const origFetch = window.fetch;
+    window.fetch = function (...args) {
+        return origFetch.apply(this, args).then((res) => {
+            try {
+                const url = (args[0] && args[0].url) || args[0];
+                if (typeof url === 'string' && url.includes('getPanSearch')) {
+                    res.clone().text().then((body) => { window.__panApiData = body; });
+                }
+            } catch (e) {}
+            return res;
+        });
+    };
+    const OrigXHR = window.XMLHttpRequest;
+    const origOpen = OrigXHR.prototype.open;
+    OrigXHR.prototype.open = function (method, url, ...rest) {
+        this.__panUrl = url;
+        return origOpen.call(this, method, url, ...rest);
+    };
+    const origSend = OrigXHR.prototype.send;
+    OrigXHR.prototype.send = function (...args) {
+        this.addEventListener('load', function () {
+            try {
+                if (typeof this.__panUrl === 'string' && this.__panUrl.includes('getPanSearch')) {
+                    window.__panApiData = this.responseText;
+                }
+            } catch (e) {}
+        });
+        return origSend.apply(this, args);
+    };
+})();"#;
+
 const PAN_PROBE_SCRIPT: &str = r#"(function () {
     try {
         const hasPanDetail = Array.from(
@@ -351,32 +385,53 @@ const PAN_PROBE_SCRIPT: &str = r#"(function () {
         ).some((el) => el.textContent && el.textContent.trim() === 'PAN Detail');
         if (!hasPanDetail) return { status: 'pending' };
 
+        const sectionLabels = ['Business Details', 'Registration Details'];
         const fields = {};
         const business = [];
-        document.querySelectorAll('table').forEach((table) => {
-            const rows = Array.from(table.querySelectorAll('tr'));
-            if (rows.length === 0) return;
-            const firstCells = rows[0].children.length;
-            if (firstCells === 2) {
-                rows.forEach((r) => {
-                    const cells = r.children;
-                    if (cells.length === 2) {
-                        const key = cells[0].textContent.trim();
-                        const val = cells[1].textContent.trim();
-                        if (key) fields[key] = val;
+        const registration = [];
+        let currentSection = '';
+        document.querySelectorAll('h1,h2,h3,h4,h5,div,span,p,table').forEach((el) => {
+            if (el.tagName === 'TABLE') {
+                const rows = Array.from(el.querySelectorAll('tr'));
+                if (rows.length === 0) return;
+                const firstCells = rows[0].children.length;
+                if (firstCells === 2) {
+                    rows.forEach((r) => {
+                        const cells = r.children;
+                        if (cells.length === 2) {
+                            const key = cells[0].textContent.trim();
+                            const val = cells[1].textContent.trim();
+                            if (key) fields[key] = val;
+                        }
+                    });
+                } else if (rows.length > 1) {
+                    const header = Array.from(rows[0].children).map((c) => c.textContent.trim());
+                    const target = currentSection === 'Registration Details' ? registration : business;
+                    for (let i = 1; i < rows.length; i++) {
+                        const cells = Array.from(rows[i].children).map((c) => c.textContent.trim());
+                        const obj = {};
+                        header.forEach((h, idx) => { obj[h] = cells[idx] ?? ''; });
+                        target.push(obj);
                     }
-                });
-            } else if (rows.length > 1) {
-                const header = Array.from(rows[0].children).map((c) => c.textContent.trim());
-                for (let i = 1; i < rows.length; i++) {
-                    const cells = Array.from(rows[i].children).map((c) => c.textContent.trim());
-                    const obj = {};
-                    header.forEach((h, idx) => { obj[h] = cells[idx] ?? ''; });
-                    business.push(obj);
+                }
+                return;
+            }
+            const text = el.textContent && el.textContent.trim();
+            if (text && sectionLabels.includes(text)) currentSection = text;
+        });
+
+        try {
+            if (window.__panApiData) {
+                const apiJson = JSON.parse(window.__panApiData);
+                const d = (apiJson && apiJson.data && apiJson.data.panDetails && apiJson.data.panDetails[0]) || null;
+                if (d && fields.PAN && d.pan === fields.PAN) {
+                    if (d.telephone) fields['Phone'] = d.telephone;
+                    if (d.mobile) fields['Mobile'] = d.mobile;
                 }
             }
-        });
-        return { status: 'Found', fields, business };
+        } catch (e) {}
+
+        return { status: 'Found', fields, business, registration };
     } catch (e) {
         return { __debug_error: 'exception', message: String((e && e.message) || e) };
     }
@@ -401,6 +456,7 @@ async fn pan_search_one(
     let fill_script = format!(
         r#"(function () {{
             try {{
+                window.__panApiData = null;
                 const inp = document.querySelector('#pan');
                 const btn = document.querySelector('#submit');
                 if (!inp || !btn) return {{ __debug_error: 'selector_missing', hasInput: !!inp, hasButton: !!btn, title: document.title }};

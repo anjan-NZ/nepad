@@ -22,7 +22,7 @@ export function renderConverter(root: HTMLElement): void {
         <input id="conv-ad-date" type="date" />
       </div>
 
-      <button type="button" id="conv-go" class="conv-go-btn">Convert</button>
+      <button type="button" id="conv-go" class="conv-go-btn" disabled>Convert</button>
 
       <div id="conv-result" class="conv-result"></div>
     </section>
@@ -41,6 +41,23 @@ export function renderConverter(root: HTMLElement): void {
 
   let direction: "bs-ad" | "ad-bs" = "bs-ad";
 
+  const bsQuick = root.querySelector<HTMLInputElement>("#conv-bs-quick")!;
+  const bsYear = root.querySelector<HTMLInputElement>("#conv-bs-year")!;
+  const bsDay = root.querySelector<HTMLInputElement>("#conv-bs-day")!;
+  const adDate = root.querySelector<HTMLInputElement>("#conv-ad-date")!;
+
+  function updateGoState() {
+    const ready =
+      direction === "bs-ad"
+        ? bsQuick.value.trim() !== "" || (bsYear.value !== "" && bsDay.value !== "")
+        : adDate.value !== "";
+    goBtn.disabled = !ready;
+  }
+
+  [bsQuick, bsYear, bsDay, adDate].forEach((input) => {
+    input.addEventListener("input", updateGoState);
+  });
+
   dirBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
       direction = btn.dataset.dir as "bs-ad" | "ad-bs";
@@ -48,8 +65,11 @@ export function renderConverter(root: HTMLElement): void {
       bsInputs.classList.toggle("hidden", direction !== "bs-ad");
       adInputs.classList.toggle("hidden", direction !== "ad-bs");
       result.innerHTML = "";
+      updateGoState();
     });
   });
+
+  updateGoState();
 
   goBtn.addEventListener("click", () => {
     try {

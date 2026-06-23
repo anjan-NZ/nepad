@@ -1,18 +1,31 @@
 :root {
-  --bg: #1b1d29;
-  --bg-soft: #242737;
-  --card: #2a2d3f;
-  --border: #383c54;
-  --text: #ECEDF5;
-  --text-dim: #9A9DB8;
+  --bg: #000000;
+  --bg-soft: #121212;
+  --card: #181818;
+  --border: #2a2a2a;
+  --text: #F5F5F5;
+  --text-dim: #9A9A9A;
   --accent: #7C84FF;
-  --accent-soft: rgba(124, 132, 255, 0.18);
+  --accent-soft: rgba(124, 132, 255, 0.15);
   --danger: #ff6b6b;
   --success: #4ade80;
 
   font-family: "Segoe UI", Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 14px;
   color: var(--text);
+}
+
+html[data-theme="light"] {
+  --bg: #FFFFFF;
+  --bg-soft: #F1F5F9;
+  --card: #FFFFFF;
+  --border: #CBD5E1;
+  --text: #0F172A;
+  --text-dim: #334155;
+  --accent: #042F2E;
+  --accent-soft: rgba(4, 47, 46, 0.10);
+  --danger: #B91C1C;
+  --success: #15803D;
 }
 
 html, body {
@@ -26,6 +39,10 @@ html, body {
 
 input, textarea {
   user-select: text;
+}
+
+.hidden {
+  display: none;
 }
 
 .edge-strip {
@@ -226,6 +243,16 @@ body.is-timer-toast .timer-toast:hover {
   border-color: var(--accent);
 }
 
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-btn:disabled:hover {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
 .tabs {
   display: flex;
   gap: 4px;
@@ -251,6 +278,18 @@ body.is-timer-toast .timer-toast:hover {
   height: 22px;
   padding: 0;
   font-size: 15px;
+  background: var(--bg-soft);
+}
+
+.theme-toggle-corner {
+  position: absolute;
+  top: 10px;
+  right: 40px;
+  z-index: 20;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 13px;
   background: var(--bg-soft);
 }
 
@@ -285,12 +324,23 @@ body.is-timer-toast .timer-toast:hover {
 }
 
 .card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 10px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent);
+  color: var(--text);
+}
+
+.card-title::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px 1px var(--accent);
+  flex-shrink: 0;
 }
 
 .tools-list {
@@ -598,6 +648,11 @@ body.is-timer-toast .timer-toast:hover {
 
 .danger-zone .card-title {
   color: var(--danger);
+}
+
+.danger-zone .card-title::before {
+  background: var(--danger);
+  box-shadow: 0 0 6px 1px var(--danger);
 }
 
 .danger-btn {
@@ -1216,7 +1271,7 @@ body.is-timer-toast .timer-toast:hover {
   white-space: nowrap;
 }
 
-.pan-bulk .conv-go-btn:disabled {
+.conv-go-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
