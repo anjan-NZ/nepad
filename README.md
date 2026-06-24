@@ -24,6 +24,16 @@ backend, no telemetry.
 6. Stopwatch, timer, and reminders
 7. More will be added as per relevancy...
 
+## Windows Defender false positive
+
+The installer is unsigned (no code-signing cert yet), and Defender's local
+ML heuristic may flag it as `Trojan:Win32/Bearfoos.A!ml` on install. This is
+a false positive — VirusTotal shows 0/70 detections, including Microsoft's
+own cloud engine. The flag is triggered by a benign combination of behaviors
+(autostart entry, background tray process, self-updater) that resemble
+malware heuristics. If it happens, restore the file from quarantine and add
+an exclusion for `%LOCALAPPDATA%\NePad`, or build from source instead.
+
 ## Requirements
 
 - Node.js
