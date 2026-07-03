@@ -284,7 +284,13 @@ export function renderTdsExtractor(root: HTMLElement): void {
 
   resolveBtn.addEventListener("click", async () => {
     resolveBtn.disabled = true;
-    const uniquePans = [...new Set(records.map((r) => r.pan))];
+    const uniquePans = [...new Set(records.map((r) => r.pan))].filter((p) => /^\d{9,10}$/.test(p));
+    const skipped = records.filter((r) => !r.pan).length;
+    if (uniquePans.length === 0) {
+      progressEl.textContent = "No rows with a PAN to resolve.";
+      resolveBtn.disabled = false;
+      return;
+    }
     let resolved = 0;
     progressEl.classList.add("is-active");
     progressEl.classList.remove("is-done");
@@ -304,7 +310,9 @@ export function renderTdsExtractor(root: HTMLElement): void {
     }
     progressEl.classList.remove("is-active");
     progressEl.classList.add("is-done");
-    progressEl.textContent = `Resolved ${resolved}/${uniquePans.length} unique PAN(s).`;
+    progressEl.textContent = `Resolved ${resolved}/${uniquePans.length} unique PAN(s).${
+      skipped ? ` ${skipped} row(s) without a PAN kept their extracted name.` : ""
+    }`;
     renderSummary();
     resolveBtn.disabled = false;
   });

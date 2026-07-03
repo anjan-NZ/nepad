@@ -149,10 +149,12 @@ export async function parseTdsPdf(bytes: Uint8Array, sourceFile: string): Promis
         date = conv;
       } else if (/^[\d,]+\.\d{2}$/.test(conv)) {
         amounts.push({ x: w.x, val: conv });
-      } else if (/^\d{1,3}$/.test(conv) && sn === null) {
-        sn = conv;
-      } else if (/^\d{6,10}$/.test(conv) && pan === null) {
+      } else if (/^\d{9,10}$/.test(conv) && pan === null) {
         pan = conv;
+      } else if (/^\d{1,7}$/.test(conv) && sn === null) {
+        sn = conv;
+      } else if (/^\d{1,3}(,\d{3})+$/.test(conv) && sn === null) {
+        sn = conv.replace(/,/g, "");
       } else if (/^\d+$/.test(conv)) {
         // ignore stray numeric
       } else {
@@ -160,12 +162,12 @@ export async function parseTdsPdf(bytes: Uint8Array, sourceFile: string): Promis
       }
     }
 
-    if (pan && date && amounts.length === 2) {
+    if (date && amounts.length === 2) {
       amounts.sort((a, b) => a.x - b.x);
       nameParts.sort((a, b) => a.x - b.x);
       records.push({
         sn: sn ?? "",
-        pan,
+        pan: pan ?? "",
         nameNepali: nameParts.map((p) => p.text).join(" "),
         nameEnglish: "",
         date,

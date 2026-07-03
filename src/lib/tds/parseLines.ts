@@ -21,6 +21,8 @@ const DATA_ROW_RE =
   /^(.+?)\s+(\d{9,10})\s+(\d{4}\.\d{2}\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+(\d+)\s+(AD|BS)$/;
 const DATA_ONLY_RE =
   /^(\d{9,10})\s+(\d{4}\.\d{2}\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+(\d+)\s+(AD|BS)$/;
+const DATA_NOPAN_RE =
+  /^(.+?)\s+(\d{4}\.\d{2}\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+(\d+)\s+(AD|BS)$/;
 const SKIP_TEXT_KW = [
   "जममप",
   "रकम :",
@@ -158,6 +160,29 @@ export function parseTdsLines(
         sourceFile,
       });
       pendingName = "";
+      continue;
+    }
+
+    m = DATA_NOPAN_RE.exec(translated);
+    if (m) {
+      let vendor = m[1].trim();
+      if (pendingName) {
+        vendor = `${pendingName} ${vendor}`.trim();
+        pendingName = "";
+      }
+      records.push({
+        sn: m[5],
+        pan: "",
+        nameNepali: vendor,
+        nameEnglish: "",
+        date: m[2],
+        dateType: m[6] as "AD" | "BS",
+        payment: parseAmount(m[3]),
+        tds: parseAmount(m[4]),
+        headingCode: currentCode,
+        headingLabel: discovered.get(currentCode) ?? currentCode,
+        sourceFile,
+      });
       continue;
     }
 
