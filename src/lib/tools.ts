@@ -3,6 +3,7 @@ import { renderConverter } from "./converter";
 import { renderPan } from "./pan";
 import { renderTdsExtractor } from "./tdsExtractor";
 import { renderVatExtractor } from "./vatExtractor";
+import { renderRevenueCodes } from "./revenueCodes";
 import { getSettings, setSetting } from "./store";
 import { enableDragReorder } from "./dragReorder";
 
@@ -17,6 +18,7 @@ const TOOLS: Record<string, ToolDef> = {
   pan: { title: "PAN Lookup", render: renderPan },
   tds: { title: "TDS Return Extractor", render: renderTdsExtractor },
   vat: { title: "VAT Return Extractor", render: renderVatExtractor },
+  revenueCodes: { title: "Revenue Codes", render: renderRevenueCodes },
 };
 
 const ALL_TOOL_IDS = Object.keys(TOOLS);
@@ -29,6 +31,12 @@ export async function renderTools(root: HTMLElement): Promise<void> {
   const hidden = new Set(settings.toolsHidden.filter((id) => ALL_TOOL_IDS.includes(id)));
 
   root.innerHTML = "";
+
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "tools-search";
+  searchWrap.innerHTML = `<input type="text" id="tools-search-input" placeholder="Search tools..." autocomplete="off" />`;
+  root.append(searchWrap);
+  const searchInput = searchWrap.querySelector<HTMLInputElement>("#tools-search-input")!;
 
   const hiddenIds = order.filter((id) => hidden.has(id));
   if (hiddenIds.length > 0) {
@@ -90,4 +98,12 @@ export async function renderTools(root: HTMLElement): Promise<void> {
     },
     { handleSelector: ".tool-drag-handle" },
   );
+
+  searchInput.addEventListener("input", () => {
+    const q = searchInput.value.trim().toLowerCase();
+    list.querySelectorAll<HTMLElement>(".tool-shell").forEach((shell) => {
+      const title = TOOLS[shell.dataset.id!].title.toLowerCase();
+      shell.style.display = q === "" || title.includes(q) ? "" : "none";
+    });
+  });
 }

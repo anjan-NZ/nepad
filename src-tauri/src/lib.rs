@@ -546,6 +546,16 @@ fn read_pans_from_excel(path: String) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+fn download_revenue_code_pdf(app: tauri::AppHandle, dest_path: String) -> Result<(), String> {
+    let resource_path = app
+        .path()
+        .resolve("resources/Revenue Code.pdf", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| e.to_string())?;
+    std::fs::copy(&resource_path, &dest_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn write_excel(path: String, headers: Vec<String>, rows: Vec<Vec<String>>) -> Result<(), String> {
     use rust_xlsxwriter::{Format, Workbook};
 
@@ -772,6 +782,7 @@ pub fn run() {
             read_pans_from_excel,
             write_excel,
             write_excel_multi,
+            download_revenue_code_pdf,
             erase_data_and_uninstall,
             set_window_visible,
             move_window,
