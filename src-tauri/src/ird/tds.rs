@@ -8,6 +8,8 @@ const ORIGIN: &str = "https://taxpayerportal.ird.gov.np";
 const REFERER: &str = "https://taxpayerportal.ird.gov.np/taxpayer/app.html";
 const GAP_MS: u64 = 1000;
 const MAX_CONSECUTIVE_FAILS: usize = 3;
+const CURL_ATTEMPTS: usize = 3;
+const RETRY_GAP_MS: u64 = 700;
 
 #[derive(Serialize)]
 pub struct TdsRow {
@@ -250,7 +252,7 @@ async fn run_curl(ua: &str, cookies: &str, token: &str, it: &TdsPick, out: &std:
         .arg("--max-time").arg("60")
         .arg("-o").arg(out)
         .arg("-A").arg(ua)
-        .arg("-H").arg(format!("Cookie: {cookies}"))
+        .arg("-b").arg(cookies)
         .arg("-H").arg(format!("Referer: {REFERER}"))
         .arg("-H").arg(format!("Origin: {ORIGIN}"))
         .arg("--data-urlencode").arg(format!("TranNo={}", it.tran_no))
@@ -336,8 +338,15 @@ async fn download_via_portal(
     app: &tauri::AppHandle,
     dir: &std::path::Path,
     name: &str,
+    token: &str,
     it: &TdsPick,
 ) -> Result<(), String> {
+    let token_ok = !token.is_empty()
+        && token.len() <= 200
+        && token.chars().all(|c| c.is_ascii_alphanumeric() || "-_.=+/".contains(c));
+    if !token_ok {
+        return Err("bad form token".into());
+    }
     let win = app
         .get_webview_window(IRD_LABEL)
         .ok_or("portal window is closed")?;
@@ -346,7 +355,7 @@ async fn download_via_portal(
     let js = format!(
         r#"(function(){{var f=document.createElement('form');f.method='POST';f.target='{name}';
 f.action='/Reporting/TDS/ReportHandlers/TDSSubmissionReportHandler.ashx';
-[['TranNo','{tran}'],['Status','{status}'],['formToken','a']].forEach(function(p){{var i=document.createElement('input');i.type='hidden';i.name=p[0];i.value=p[1];f.appendChild(i);}});
+[['TranNo','{tran}'],['Status','{status}'],['formToken','{token}']].forEach(function(p){{var i=document.createElement('input');i.type='hidden';i.name=p[0];i.value=p[1];f.appendChild(i);}});
 document.body.appendChild(f);f.submit();f.remove();}})();"#,
         tran = it.tran_no,
         status = it.status,
@@ -389,17 +398,26 @@ async fn download_one(
     let name = format!("TDS_{pan}_{}.pdf", it.tran_no);
     let target = dir.join(&name);
 
-    let curl_err = match run_curl(&session.ua, &session.cookie_header, token, it, &target).await {
-        Ok(()) => match std::fs::read(&target) {
-            Ok(b) if b.starts_with(b"%PDF-") => return Ok(name),
-            Ok(b) => format!("curl got {} bytes, not a PDF", b.len()),
-            Err(e) => format!("curl output unreadable: {e}"),
-        },
-        Err(e) => e,
-    };
+    let mut curl_err = String::new();
+    for attempt in 0..CURL_ATTEMPTS {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(RETRY_GAP_MS)).await;
+        }
+        match run_curl(&session.ua, &session.cookie_header, token, it, &target).await {
+            Ok(()) => match std::fs::read(&target) {
+                Ok(b) if b.starts_with(b"%PDF-") => return Ok(name),
+                Ok(b) => curl_err = format!("curl got {} bytes, not a PDF (try {})", b.len(), attempt + 1),
+                Err(e) => curl_err = format!("curl output unreadable: {e}"),
+            },
+            Err(e) => {
+                curl_err = e;
+                break;
+            }
+        }
+    }
     let _ = std::fs::remove_file(&target);
 
-    let nav_err = match download_via_portal(app, dir, name.trim_end_matches(".pdf"), it).await {
+    let nav_err = match download_via_portal(app, dir, name.trim_end_matches(".pdf"), token, it).await {
         Ok(()) => return Ok(name),
         Err(e) => e,
     };

@@ -35,10 +35,10 @@ Once you are logged in, enter a PAN and a Bikram Sambat date range to list
 that taxpayer's submitted TDS returns and save the ones you pick to
 `Downloads\IRD Downloads`.
 
-**Known limitation:** the portal rejects the report request on some networks,
-and the affected rows come back as "Portal refused this return" while others
-save fine. The cause is on the portal's side and is not yet understood, so
-treat this tool as experimental and verify against the portal itself.
+**If a return is refused:** on some networks the portal turns down a
+download now and then. NePad retries each refused return automatically; if
+one still shows "Portal refused this return", try it again a little later or
+from another network.
 
 ## Windows Defender false positive
 
