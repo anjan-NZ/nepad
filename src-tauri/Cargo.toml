@@ -1,6 +1,6 @@
 [package]
 name = "nepad"
-version = "1.4.0"
+version = "1.5.0"
 description = "NePad - desktop day planner with Nepali date support"
 authors = ["Anjan Simkhada"]
 edition = "2021"
@@ -30,7 +30,8 @@ tauri-plugin-process = "2"
 tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "process"] }
+reqwest = { version = "0.12", default-features = false, features = ["cookies", "native-tls", "http2"] }
 calamine = "0.35"
 rust_xlsxwriter = "0.95"
 

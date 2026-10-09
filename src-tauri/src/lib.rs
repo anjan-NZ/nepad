@@ -1,3 +1,5 @@
+mod ird;
+
 use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 use tauri::{
@@ -788,6 +790,11 @@ pub fn run() {
             move_window,
             show_reminder_toast,
             show_timer_toast,
+            ird::ird_open_portal,
+            ird::ird_downloads_dir,
+            ird::tds::ird_session_ready,
+            ird::tds::ird_list_tds,
+            ird::tds::ird_download_tds,
         ])
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "Show NePad", true, None::<&str>)?;

@@ -4,6 +4,7 @@ import { renderPan } from "./pan";
 import { renderTdsExtractor } from "./tdsExtractor";
 import { renderVatExtractor } from "./vatExtractor";
 import { renderRevenueCodes } from "./revenueCodes";
+import { renderIrdPortal } from "./irdPortal";
 import { getSettings, setSetting } from "./store";
 import { enableDragReorder } from "./dragReorder";
 
@@ -19,6 +20,7 @@ const TOOLS: Record<string, ToolDef> = {
   tds: { title: "TDS Return Extractor", render: renderTdsExtractor },
   vat: { title: "VAT Return Extractor", render: renderVatExtractor },
   revenueCodes: { title: "Revenue Codes", render: renderRevenueCodes },
+  irdTds: { title: "IRD TDS Downloader", render: renderIrdPortal },
 };
 
 const ALL_TOOL_IDS = Object.keys(TOOLS);
