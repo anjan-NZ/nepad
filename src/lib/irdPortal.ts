@@ -43,8 +43,8 @@ export function renderIrdPortal(root: HTMLElement): void {
         <p class="pan-hint">Enter the PAN and the Nepali date range.</p>
         <div class="conv-inputs ird-inputs">
           <input type="text" id="ird-pan" placeholder="PAN" maxlength="9" />
-          <input type="text" id="ird-from" value="2081.04.01" title="From (BS)" />
-          <input type="text" id="ird-to" value="2082.03.32" title="To (BS)" />
+          <input type="text" id="ird-from" placeholder="From (BS)" title="From date, e.g. 2081.04.01" />
+          <input type="text" id="ird-to" placeholder="To (BS)" title="To date, e.g. 2082.03.32" />
         </div>
         <div class="tds-pick-row ird-actions">
           <button type="button" class="icon-btn pan-pick-btn" id="ird-search">Search list</button>
@@ -144,6 +144,10 @@ export function renderIrdPortal(root: HTMLElement): void {
     const pan = panInput.value.trim();
     if (!pan) {
       msgEl.textContent = "Enter the PAN first.";
+      return;
+    }
+    if (!$<HTMLInputElement>("ird-from").value.trim() || !$<HTMLInputElement>("ird-to").value.trim()) {
+      msgEl.textContent = "Enter the from and to dates.";
       return;
     }
     msgEl.textContent = "Searching...";
