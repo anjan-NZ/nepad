@@ -81,18 +81,16 @@ interface Word {
   yTop: number;
 }
 
-async function parseVatPdf(bytes: Uint8Array, filename: string): Promise<VatRecord> {
-  const { GlobalWorkerOptions, getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const workerUrl = (await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url")).default;
-  GlobalWorkerOptions.workerSrc = workerUrl;
+interface Row {
+  yC: number;
+  words: Word[];
+  /** Leading serial number of the row ("1.1.", "4."), Nepali digits normalised. "" if none. */
+  marker: string;
+}
 
-  const doc = await getDocument({ data: bytes }).promise;
-  const page = await doc.getPage(1);
-  const content = await page.getTextContent();
-  const pageH = page.getViewport({ scale: 1 }).height;
-
+function pageWords(items: any[], pageH: number): Word[] {
   const words: Word[] = [];
-  for (const item of content.items as any[]) {
+  for (const item of items) {
     const str = (item.str ?? "").trim();
     if (!str) continue;
     const x = item.transform[4];
@@ -110,30 +108,108 @@ async function parseVatPdf(bytes: Uint8Array, filename: string): Promise<VatReco
     }
   }
   words.sort((a, b) => a.yTop - b.yTop || a.x0 - b.x0);
+  return words;
+}
+
+/** Groups words into visual rows and rebuilds each row's leading serial number.
+ *
+ * The 2083-era IRD PDFs split "१.१." into four items across two fonts (Nepali digits in the
+ * Devanagari font, the dots in the Latin one), so the marker can no longer be matched as a
+ * single token — it has to be re-joined from the leading digit/dot run.
+ */
+function buildRows(words: Word[], tol = 5): Row[] {
+  const rows: Row[] = [];
+  for (const w of [...words].sort((a, b) => a.yC - b.yC || a.x0 - b.x0)) {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(w.yC - last.yC) <= tol) {
+      last.words.push(w);
+      last.yC = (last.yC * (last.words.length - 1) + w.yC) / last.words.length;
+    } else {
+      rows.push({ yC: w.yC, words: [w], marker: "" });
+    }
+  }
+  for (const r of rows) {
+    r.words.sort((a, b) => a.x0 - b.x0);
+    let key = "";
+    for (const w of r.words) {
+      if (w.x0 > 160) break;
+      const t = nepToAra(w.text);
+      if (!/^[0-9.]+$/.test(t)) break;
+      key += t;
+    }
+    r.marker = key;
+  }
+  return rows;
+}
+
+const digitsOf = (s: string) => nepToAra(s).replace(/\D/g, "");
+
+/** Ports the standalone `nepal_vat_extractor.html` tool's PDF parser into NePad.
+ *
+ * Row values are found by anchoring on a row's Nepali serial number (e.g. "१.१." for the
+ * taxable-sales row) and reading the numbers to its right, rather than by fixed columns — the
+ * same word-coordinate technique already used by the TDS Extractor's PDF parser
+ * (`lib/tds/parsePdf.ts`), since the same pdf.js text-layer quirks apply.
+ *
+ * Two Anusuchi-10 layouts are in circulation and both are handled. The older one is a single
+ * page whose garbled label text is stable enough to regex; the newer one bundles the return as
+ * page 1 of a many-page file with the purchase/sales annexures behind it, drops most Devanagari
+ * label glyphs entirely, and splits the row markers across fonts. Every lookup therefore tries
+ * the original exact-token/label match first and falls back to a layout-independent one, so old
+ * files keep parsing exactly as they did.
+ */
+async function parseVatPdf(bytes: Uint8Array, filename: string): Promise<VatRecord> {
+  const { GlobalWorkerOptions, getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const workerUrl = (await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url")).default;
+  GlobalWorkerOptions.workerSrc = workerUrl;
+
+  const doc = await getDocument({ data: bytes }).promise;
+
+  let words: Word[] | null = null;
+  let rows: Row[] = [];
+  let firstPage: Word[] | null = null;
+  for (let p = 1; p <= Math.min(doc.numPages, 5) && !words; p++) {
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    const pw = pageWords(content.items as any[], page.getViewport({ scale: 1 }).height);
+    if (p === 1) firstPage = pw;
+    const pr = buildRows(pw);
+    if (pr.some((r) => r.marker === "1.1.") && pr.some((r) => r.marker === "4.")) {
+      words = pw;
+      rows = pr;
+    }
+  }
+  if (!words) {
+    words = firstPage ?? [];
+    rows = buildRows(words);
+  }
+  const ws = words;
 
   const rowAt = (yRef: number, tol = 7) =>
-    words.filter((w) => Math.abs(w.yC - yRef) < tol).sort((a, b) => a.x0 - b.x0);
+    ws.filter((w) => Math.abs(w.yC - yRef) < tol).sort((a, b) => a.x0 - b.x0);
   const findY = (exact: string, xMax = 160) => {
-    const w = words.find((w) => w.x0 < xMax && w.text === exact);
+    const w = ws.find((w) => w.x0 < xMax && w.text === exact);
     return w ? w.yC : null;
   };
-  const rowNums = (row: Word[], minX = 220): [string | null, string | null] => {
-    const ns = row.filter((w) => w.x0 >= minX && /[\d-]/.test(w.text));
-    return [ns[0]?.text ?? null, ns[1]?.text ?? null];
-  };
-  const row = (marker: string): [string | null, string | null] => {
+  const legacyVals = (marker: string): string[] => {
     const y = findY(marker);
-    return y != null ? rowNums(rowAt(y)) : [null, null];
+    if (y == null) return [];
+    return rowAt(y)
+      .filter((w) => w.x0 >= 220 && /[\d-]/.test(w.text))
+      .map((w) => w.text);
   };
-  const singleRowVal = (marker: string): string | null => {
-    const y = findY(marker);
-    if (y == null) return null;
-    const ns = rowAt(y).filter((w) => w.x0 >= 220 && /[\d-]/.test(w.text));
-    return ns[0]?.text ?? null;
+  const genericVals = (marker: string): string[] => {
+    const r = rows.find((r) => r.marker === nepToAra(marker));
+    if (!r) return [];
+    return r.words.filter((w) => w.x0 >= 200 && cleanNum(w.text) != null).map((w) => w.text);
+  };
+  const vals = (marker: string): string[] => {
+    const v = legacyVals(marker);
+    return v.length ? v : genericVals(marker);
   };
 
   const byRow: Record<number, Word[]> = {};
-  for (const w of words) {
+  for (const w of ws) {
     const k = Math.round(w.yTop / 5) * 5;
     (byRow[k] ??= []).push(w);
   }
@@ -145,41 +221,65 @@ async function parseVatPdf(bytes: Uint8Array, filename: string): Promise<VatReco
   const m = (rx: RegExp) => text.match(rx)?.[1] ?? "";
 
   const rec: Partial<VatRecord> = { File: filename };
-  rec["PAN No"] = m(/पयपन\s*नस\.?\s*:?\s*(\d+)/);
-  rec["Tax Year"] = m(/टपकस\s*सरर\s*:\s*(\d+)/);
-  rec["Tax Month"] = m(/असनन\.?\s*:\s*(\d+)/);
 
-  const dateWord = words.find((w) => /नमनत:\d{4}\.\d{2}\.\d{2}/.test(w.text));
+  // Header fields sit above the table; restricting the fallback search there keeps the 9-digit
+  // PAN rule from matching a 9-digit amount further down the page.
+  const tableTop = rows.find((r) => r.marker === "1.1.")?.yC ?? Number.MAX_SAFE_INTEGER;
+  const head = ws.filter((w) => w.yC < tableTop - 5);
+
+  rec["PAN No"] = m(/पयपन\s*नस\.?\s*:?\s*(\d+)/);
+  if (!rec["PAN No"]) {
+    const w = head.find((w) => digitsOf(w.text).length === 9);
+    rec["PAN No"] = w ? digitsOf(w.text) : "";
+  }
+
+  rec["Tax Year"] = m(/टपकस\s*सरर\s*:\s*(\d+)/);
+  let yearWord: Word | undefined;
+  if (!rec["Tax Year"]) {
+    yearWord = head.find((w) => /^[^\d]{0,3}(20\d{2}|21\d{2})$/.test(nepToAra(w.text)));
+    rec["Tax Year"] = yearWord ? digitsOf(yearWord.text) : "";
+  }
+
+  rec["Tax Month"] = m(/असनन\.?\s*:\s*(\d+)/);
+  if (!rec["Tax Month"] && yearWord) {
+    // The period number shares the year's row, written as a labelled value like "अवधि.:1".
+    const yw = yearWord;
+    const cand = ws
+      .filter((w) => w !== yw && Math.abs(w.yC - yw.yC) < 6 && /[.:]/.test(w.text))
+      .map((w) => ({ w, d: digitsOf(w.text) }))
+      .filter((o) => o.d.length > 0 && o.d.length <= 2 && +o.d >= 1 && +o.d <= 12)
+      .sort((a, b) => a.w.x0 - b.w.x0);
+    rec["Tax Month"] = cand.length ? String(+cand[cand.length - 1].d) : "";
+  }
+
+  const dateWord = ws.find((w) => /नमनत:\d{4}\.\d{2}\.\d{2}/.test(w.text));
   rec["Filed Date"] = dateWord
     ? dateWord.text.replace("नमनत:", "")
     : m(/नमनत:\s*(\d{4}\.\d{2}\.\d{2})/);
+  if (!rec["Filed Date"]) {
+    const w = [...ws].reverse().find((w) => /(2[01]\d{2}\.\d{2}\.\d{2})$/.test(w.text));
+    rec["Filed Date"] = w
+      ? w.text.match(/(2[01]\d{2}\.\d{2}\.\d{2})$/)![1]
+      : (text.match(/\b(2[01]\d{2}\.\d{2}\.\d{2})\b/)?.[1] ?? "");
+  }
 
-  let [a, b] = row("१.१.");
-  rec["Taxable Sales"] = cleanNum(a);
-  rec["Sales VAT"] = cleanNum(b);
-  [a] = row("१.२.");
-  rec["Export Sales"] = cleanNum(a);
-  [a] = row("१.३.");
-  rec["Exempt Sales"] = cleanNum(a);
-  [a, b] = row("२.१.");
-  rec["Local Purchase"] = cleanNum(a);
-  rec["Input VAT"] = cleanNum(b);
-  [a, b] = row("२.२.");
-  rec["Import Purchase"] = cleanNum(a);
-  rec["Import VAT"] = cleanNum(b);
-  [a] = row("२.३.");
-  rec["Exempt Local"] = cleanNum(a);
-  [a] = row("२.४.");
-  rec["Exempt Import"] = cleanNum(a);
-  [a, b] = row("३.१.");
-  rec["Thapghat Credit"] = cleanNum(a);
-  rec["Thapghat Debit"] = cleanNum(b);
-  [a, b] = row("४.");
-  rec["Total Credit"] = cleanNum(a);
-  rec["Total Debit"] = cleanNum(b);
-  rec["Net Tax"] = cleanNum(singleRowVal("५."));
-  rec["Prev Month Credit"] = cleanNum(singleRowVal("६."));
-  rec["Net Payable"] = cleanNum(singleRowVal("७."));
+  const put = (marker: string, k1: keyof VatRecord, k2?: keyof VatRecord) => {
+    const v = vals(marker);
+    (rec as any)[k1] = cleanNum(v[0]);
+    if (k2) (rec as any)[k2] = cleanNum(v[1]);
+  };
+  put("१.१.", "Taxable Sales", "Sales VAT");
+  put("१.२.", "Export Sales");
+  put("१.३.", "Exempt Sales");
+  put("२.१.", "Local Purchase", "Input VAT");
+  put("२.२.", "Import Purchase", "Import VAT");
+  put("२.३.", "Exempt Local");
+  put("२.४.", "Exempt Import");
+  put("३.१.", "Thapghat Credit", "Thapghat Debit");
+  put("४.", "Total Credit", "Total Debit");
+  put("५.", "Net Tax");
+  put("६.", "Prev Month Credit");
+  put("७.", "Net Payable");
 
   return rec as VatRecord;
 }

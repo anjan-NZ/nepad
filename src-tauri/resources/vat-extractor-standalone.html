@@ -591,13 +591,9 @@ function cleanNum(v) {
   const n=parseFloat(s); return isNaN(n)?null:n;
 }
 
-async function getPdfWords(bytes) {
-  const pdf = await pdfjsLib.getDocument({data:bytes}).promise;
-  const page = await pdf.getPage(1);
-  const content = await page.getTextContent();
-  const pageH = page.getViewport({scale:1}).height;
+function pageWords(items, pageH) {
   const words = [];
-  for (const item of content.items) {
+  for (const item of items) {
     if (!item.str?.trim()) continue;
     const x=item.transform[4];
     const yBot=pageH-item.transform[5];
@@ -613,9 +609,53 @@ async function getPdfWords(bytes) {
   return words;
 }
 
+// Groups words into visual rows and rebuilds each row's leading serial number ("1.1.", "4.").
+// The 2083-era IRD PDFs split "१.१." into four items across two fonts (Nepali digits in the
+// Devanagari font, the dots in the Latin one), so the marker can no longer be matched as a
+// single token — it has to be re-joined from the leading digit/dot run.
+function buildRows(words, tol=5) {
+  const rows=[];
+  for (const w of [...words].sort((a,b)=>a.yC-b.yC||a.x0-b.x0)) {
+    const last=rows[rows.length-1];
+    if (last && Math.abs(w.yC-last.yC)<=tol) {
+      last.words.push(w);
+      last.yC=(last.yC*(last.words.length-1)+w.yC)/last.words.length;
+    } else rows.push({yC:w.yC,words:[w],marker:''});
+  }
+  for (const r of rows) {
+    r.words.sort((a,b)=>a.x0-b.x0);
+    let key='';
+    for (const w of r.words) {
+      if (w.x0>160) break;
+      const t=nepToAra(w.text);
+      if (!/^[0-9.]+$/.test(t)) break;
+      key+=t;
+    }
+    r.marker=key;
+  }
+  return rows;
+}
+
+// Two Anusuchi-10 layouts are in circulation. The older one is a single page whose garbled
+// label text is stable enough to regex; the newer one bundles the return as page 1 of a
+// many-page file with the annexures behind it, so the return page has to be located.
+async function getPdfWords(bytes) {
+  const pdf = await pdfjsLib.getDocument({data:bytes}).promise;
+  let first=null;
+  for (let p=1; p<=Math.min(pdf.numPages,5); p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const words = pageWords(content.items, page.getViewport({scale:1}).height);
+    if (p===1) first=words;
+    const rows = buildRows(words);
+    if (rows.some(r=>r.marker==='1.1.') && rows.some(r=>r.marker==='4.')) return words;
+  }
+  return first||[];
+}
+
 const rowAt   = (words,yRef,tol=7) => words.filter(w=>Math.abs(w.yC-yRef)<tol).sort((a,b)=>a.x0-b.x0);
 const findY   = (words,exact,xMax=160) => { const w=words.find(w=>w.x0<xMax&&w.text===exact); return w?w.yC:null; };
-const rowNums = (row,minX=220) => { const ns=row.filter(w=>w.x0>=minX&&/[\d\-]/.test(w.text)); return [ns[0]?.text??null,ns[1]?.text??null]; };
+const digitsOf = s => nepToAra(s).replace(/\D/g,'');
 
 const fullText = words => {
   const byRow={};
@@ -624,48 +664,81 @@ const fullText = words => {
     .map(k=>byRow[k].sort((a,b)=>a.x0-b.x0).map(w=>w.text).join(' ')).join('\n');
 };
 
-// Single-value row (value is far right, only one number)
-function singleRowVal(words, marker) {
-  const y = findY(words, marker);
-  if (y==null) return null;
-  const ns = rowAt(words,y).filter(w=>w.x0>=220&&/[\d\-]/.test(w.text));
-  return ns[0]?.text ?? null;
-}
+// Every row lookup tries the original exact-token match first and falls back to the
+// layout-independent one, so files in the older layout keep parsing exactly as they did.
+const legacyVals = (words,marker) => {
+  const y=findY(words,marker);
+  if (y==null) return [];
+  return rowAt(words,y).filter(w=>w.x0>=220&&/[\d\-]/.test(w.text)).map(w=>w.text);
+};
+const genericVals = (rows,marker) => {
+  const r=rows.find(r=>r.marker===nepToAra(marker));
+  if (!r) return [];
+  return r.words.filter(w=>w.x0>=200&&cleanNum(w.text)!=null).map(w=>w.text);
+};
 
 async function extractRecord(bytes, filename) {
   const words = await getPdfWords(bytes);
+  const rows  = buildRows(words);
   const text  = fullText(words);
   const rec   = {File:filename};
   const m     = rx => { const r=text.match(rx); return r?r[1]:''; };
-  const row   = marker => { const y=findY(words,marker); return y!=null?rowNums(rowAt(words,y)):[null,null]; };
+  const vals  = marker => { const v=legacyVals(words,marker); return v.length?v:genericVals(rows,marker); };
 
-  rec['PAN No']    = m(/पयपन\s*नस\.?\s*:?\s*(\d+)/);
-  rec['Tax Year']  = m(/टपकस\s*सरर\s*:\s*(\d+)/);
+  // Header fields sit above the table; restricting the fallback search there keeps the 9-digit
+  // PAN rule from matching a 9-digit amount further down the page.
+  const tableTop = (rows.find(r=>r.marker==='1.1.')||{yC:Number.MAX_SAFE_INTEGER}).yC;
+  const head = words.filter(w=>w.yC<tableTop-5);
+
+  rec['PAN No'] = m(/पयपन\s*नस\.?\s*:?\s*(\d+)/);
+  if (!rec['PAN No']) {
+    const w = head.find(w=>digitsOf(w.text).length===9);
+    rec['PAN No'] = w?digitsOf(w.text):'';
+  }
+
+  rec['Tax Year'] = m(/टपकस\s*सरर\s*:\s*(\d+)/);
+  let yearWord = null;
+  if (!rec['Tax Year']) {
+    yearWord = head.find(w=>/^[^\d]{0,3}(20\d{2}|21\d{2})$/.test(nepToAra(w.text)));
+    rec['Tax Year'] = yearWord?digitsOf(yearWord.text):'';
+  }
+
   rec['Tax Month'] = m(/असनन\.?\s*:\s*(\d+)/);
+  if (!rec['Tax Month'] && yearWord) {
+    // The period number shares the year's row, written as a labelled value like "अवधि.:1".
+    const cand = words
+      .filter(w=>w!==yearWord&&Math.abs(w.yC-yearWord.yC)<6&&/[.:]/.test(w.text))
+      .map(w=>({w,d:digitsOf(w.text)}))
+      .filter(o=>o.d.length>0&&o.d.length<=2&&+o.d>=1&&+o.d<=12)
+      .sort((a,b)=>a.w.x0-b.w.x0);
+    rec['Tax Month'] = cand.length?String(+cand[cand.length-1].d):'';
+  }
 
-  // Filed date: look for "नमनत:YYYY.MM.DD" token
   const dateWord = words.find(w => /नमनत:\d{4}\.\d{2}\.\d{2}/.test(w.text));
   rec['Filed Date'] = dateWord ? dateWord.text.replace('नमनत:','') : m(/नमनत:\s*(\d{4}\.\d{2}\.\d{2})/);
+  if (!rec['Filed Date']) {
+    const w = [...words].reverse().find(w=>/(2[01]\d{2}\.\d{2}\.\d{2})$/.test(w.text));
+    rec['Filed Date'] = w ? w.text.match(/(2[01]\d{2}\.\d{2}\.\d{2})$/)[1]
+                          : ((text.match(/\b(2[01]\d{2}\.\d{2}\.\d{2})\b/)||[])[1]||'');
+  }
 
-  let [a,b]=row('१.१.');
-  rec['Taxable Sales']=cleanNum(a); rec['Sales VAT']=cleanNum(b);
-  [a]=row('१.२.'); rec['Export Sales']=cleanNum(a);
-  [a]=row('१.३.'); rec['Exempt Sales']=cleanNum(a);
-  [a,b]=row('२.१.'); rec['Local Purchase']=cleanNum(a); rec['Input VAT']=cleanNum(b);
-  [a,b]=row('२.२.'); rec['Import Purchase']=cleanNum(a); rec['Import VAT']=cleanNum(b);
-  [a]=row('२.३.'); rec['Exempt Local']=cleanNum(a);
-  [a]=row('२.४.'); rec['Exempt Import']=cleanNum(a);
-  [a,b]=row('३.१.'); rec['Thapghat Credit']=cleanNum(a); rec['Thapghat Debit']=cleanNum(b);
-  [a,b]=row('४.');   rec['Total Credit']=cleanNum(a); rec['Total Debit']=cleanNum(b);
-
-  // Row 5: Net Tax (Debit - Credit)
-  rec['Net Tax'] = cleanNum(singleRowVal(words,'५.'));
-
-  // Row 6: Previous Month Credit
-  rec['Prev Month Credit'] = cleanNum(singleRowVal(words,'६.'));
-
-  // Row 7: Net Payable (Total tax after all adjustments)
-  rec['Net Payable'] = cleanNum(singleRowVal(words,'७.'));
+  const put = (marker,k1,k2) => {
+    const v = vals(marker);
+    rec[k1] = cleanNum(v[0]);
+    if (k2) rec[k2] = cleanNum(v[1]);
+  };
+  put('१.१.','Taxable Sales','Sales VAT');
+  put('१.२.','Export Sales');
+  put('१.३.','Exempt Sales');
+  put('२.१.','Local Purchase','Input VAT');
+  put('२.२.','Import Purchase','Import VAT');
+  put('२.३.','Exempt Local');
+  put('२.४.','Exempt Import');
+  put('३.१.','Thapghat Credit','Thapghat Debit');
+  put('४.','Total Credit','Total Debit');
+  put('५.','Net Tax');
+  put('६.','Prev Month Credit');
+  put('७.','Net Payable');
 
   return rec;
 }
