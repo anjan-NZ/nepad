@@ -2,11 +2,13 @@
 
 A desktop day-planner widget for Windows: tasks, journal, quick notes,
 reminders, a Bikram Sambat (Nepali) calendar, and a few audit-focused
-utilities (PAN lookup, TDS/VAT return extractors), all in a frameless panel
-that slides in from the screen edge.
+utilities (PAN lookup, TDS/VAT return extractors, IRD TDS downloader), all in
+a frameless panel that slides in from the screen edge.
 
-Built with Tauri 2 (Rust) + Vite/TypeScript. All data stays local: no
-backend, no telemetry.
+Built with Tauri 2 (Rust) + Vite/TypeScript. There is no NePad backend and no
+telemetry — your planner data, notes and settings never leave your machine.
+The tools that look things up do talk to the IRD's own public website
+(`ird.gov.np` / `taxpayerportal.ird.gov.np`) and nowhere else.
 
 ## Shortcut
 
@@ -19,10 +21,24 @@ backend, no telemetry.
 1. TDS return extraction (straight into Excel)
 2. PAN bulk search
 3. VAT return extraction
-4. BS Calendar / date conversion
-5. Daily journal
-6. Stopwatch, timer, and reminders
-7. More will be added as per relevancy...
+4. IRD TDS downloader (see the note below)
+5. BS Calendar / date conversion
+6. Daily journal
+7. Stopwatch, timer, and reminders
+8. More will be added as per relevancy...
+
+## IRD TDS downloader
+
+Opens the IRD taxpayer portal in its own window so you can log in yourself,
+captcha included — NePad never sees, automates or stores your credentials.
+Once you are logged in, enter a PAN and a Bikram Sambat date range to list
+that taxpayer's submitted TDS returns and save the ones you pick to
+`Downloads\IRD Downloads`.
+
+**Known limitation:** the portal rejects the report request on some networks,
+and the affected rows come back as "Portal refused this return" while others
+save fine. The cause is on the portal's side and is not yet understood, so
+treat this tool as experimental and verify against the portal itself.
 
 ## Windows Defender false positive
 
