@@ -20,7 +20,7 @@ const TOOLS: Record<string, ToolDef> = {
   tds: { title: "TDS Return Extractor", render: renderTdsExtractor },
   vat: { title: "VAT Return Extractor", render: renderVatExtractor },
   revenueCodes: { title: "Revenue Codes", render: renderRevenueCodes },
-  irdTds: { title: "IRD TDS Downloader", render: renderIrdPortal },
+  irdTds: { title: "IRD Return Downloader", render: renderIrdPortal },
 };
 
 const ALL_TOOL_IDS = Object.keys(TOOLS);

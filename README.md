@@ -2,7 +2,7 @@
 
 A desktop day-planner widget for Windows: tasks, journal, quick notes,
 reminders, a Bikram Sambat (Nepali) calendar, and a few audit-focused
-utilities (PAN lookup, TDS/VAT return extractors, IRD TDS downloader), all in
+utilities (PAN lookup, TDS/VAT return extractors, IRD TDS/VAT downloader), all in
 a frameless panel that slides in from the screen edge.
 
 Built with Tauri 2 (Rust) + Vite/TypeScript. There is no NePad backend and no
@@ -21,19 +21,21 @@ The tools that look things up do talk to the IRD's own public website
 1. TDS return extraction (straight into Excel)
 2. PAN bulk search
 3. VAT return extraction
-4. IRD TDS downloader (see the note below)
+4. IRD TDS and VAT downloader (see the note below)
 5. BS Calendar / date conversion
 6. Daily journal
 7. Stopwatch, timer, and reminders
 8. More will be added as per relevancy...
 
-## IRD TDS downloader
+## IRD TDS and VAT downloader
 
 Opens the IRD taxpayer portal in its own window so you can log in yourself,
-captcha included — NePad never sees, automates or stores your credentials.
-Once you are logged in, enter a PAN and a Bikram Sambat date range to list
-that taxpayer's submitted TDS returns and save the ones you pick to
-`Downloads\IRD Downloads`.
+captcha included — NePad never sees, automates or stores your password. It only
+reads the PAN you type there, to pre-fill its own PAN box.
+Once you are logged in, pick TDS or VAT, enter a PAN and choose a fiscal
+year (or a span of years, or a custom range) to list that taxpayer's
+submitted returns and save the ones you pick to `Downloads\IRD Downloads`.
+VAT files are named like `Bhadra_2083_VAT_<PAN>.pdf`.
 
 **If a return is refused:** on some networks the portal turns down a
 download now and then. NePad retries each refused return automatically; if

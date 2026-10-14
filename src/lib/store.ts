@@ -40,7 +40,7 @@ const DEFAULT_SETTINGS: Settings = {
   showDualDate: true,
   autostart: false,
   tabOrder: ["home", "calendar", "tools"],
-  toolsOrder: ["converter", "pan", "tds", "vat", "timer"],
+  toolsOrder: ["irdTds", "converter", "pan", "tds", "vat", "timer"],
   toolsHidden: [],
   edgeStripEnabled: false,
   edgeStripPos: null,

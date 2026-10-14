@@ -1543,7 +1543,7 @@ body.is-timer-toast .timer-toast:hover {
 }
 
 .ird-inputs {
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   margin-top: 8px;
 }
 

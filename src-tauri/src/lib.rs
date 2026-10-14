@@ -795,6 +795,10 @@ pub fn run() {
             ird::tds::ird_session_ready,
             ird::tds::ird_list_tds,
             ird::tds::ird_download_tds,
+            ird::vat::ird_list_vat,
+            ird::vat::ird_download_vat,
+            ird::ird_logout,
+            ird::ird_portal_pan,
         ])
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "Show NePad", true, None::<&str>)?;

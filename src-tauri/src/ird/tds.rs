@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, Url};
 
-const ORIGIN: &str = "https://taxpayerportal.ird.gov.np";
-const REFERER: &str = "https://taxpayerportal.ird.gov.np/taxpayer/app.html";
+pub(super) const ORIGIN: &str = "https://taxpayerportal.ird.gov.np";
+pub(super) const REFERER: &str = "https://taxpayerportal.ird.gov.np/taxpayer/app.html";
 const GAP_MS: u64 = 1000;
 const MAX_CONSECUTIVE_FAILS: usize = 3;
 const CURL_ATTEMPTS: usize = 3;
@@ -41,13 +41,13 @@ struct Progress {
     total: usize,
 }
 
-struct Session {
-    jar_client: reqwest::Client,
+pub(super) struct Session {
+    pub(super) jar_client: reqwest::Client,
     cookie_header: String,
     ua: String,
 }
 
-fn session_client(app: &tauri::AppHandle, ua: &str) -> Result<Session, String> {
+pub(super) fn session_client(app: &tauri::AppHandle, ua: &str) -> Result<Session, String> {
     if ua.is_empty() || ua.len() > 300 || !ua.is_ascii() {
         return Err("Bad browser identity string".into());
     }
@@ -84,7 +84,7 @@ fn session_client(app: &tauri::AppHandle, ua: &str) -> Result<Session, String> {
     })
 }
 
-fn after<'a>(hay: &'a str, key: &str) -> Option<&'a str> {
+pub(super) fn after<'a>(hay: &'a str, key: &str) -> Option<&'a str> {
     hay.find(key).map(|i| &hay[i + key.len()..])
 }
 
@@ -112,7 +112,7 @@ fn parse_rows(txt: &str) -> Vec<TdsRow> {
     rows
 }
 
-fn safe(s: &str) -> bool {
+pub(super) fn safe(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '.')
 }
 
@@ -135,7 +135,7 @@ pub async fn ird_session_ready(app: tauri::AppHandle, ua: String) -> bool {
     ready
 }
 
-fn portal_rejected(txt: &str) -> bool {
+pub(super) fn portal_rejected(txt: &str) -> bool {
     txt.contains("Oopspage") || txt.contains("Could not process")
 }
 
@@ -195,6 +195,17 @@ async fn form_token(client: &reqwest::Client) -> String {
         .to_string()
 }
 
+pub(super) struct Report {
+    pub path: &'static str,
+    pub fields: Vec<(&'static str, String)>,
+}
+
+pub(super) struct Job {
+    pub id: String,
+    pub name: String,
+    pub report: Report,
+}
+
 #[tauri::command]
 pub async fn ird_download_tds(
     app: tauri::AppHandle,
@@ -205,27 +216,49 @@ pub async fn ird_download_tds(
     if !safe(&pan) {
         return Err("Bad PAN".into());
     }
+    if items.iter().any(|it| !safe(&it.tran_no) || !safe(&it.status)) {
+        return Err("bad row".into());
+    }
     let session = session_client(&app, &ua)?;
     let token = form_token(&session.jar_client).await;
-    let dir = downloads_dir(&app);
-    let total = items.len();
+    let jobs = items
+        .into_iter()
+        .map(|it| Job {
+            name: format!("TDS_{pan}_{}", it.tran_no),
+            id: it.tran_no.clone(),
+            report: Report {
+                path: "/Reporting/TDS/ReportHandlers/TDSSubmissionReportHandler.ashx",
+                fields: vec![
+                    ("TranNo", it.tran_no),
+                    ("Status", it.status),
+                    ("formToken", token.clone()),
+                ],
+            },
+        })
+        .collect();
+    Ok(run_batch(&app, &session, jobs).await)
+}
+
+pub(super) async fn run_batch(app: &tauri::AppHandle, session: &Session, jobs: Vec<Job>) -> Vec<DlResult> {
+    let dir = downloads_dir(app);
+    let total = jobs.len();
     let mut results = Vec::with_capacity(total);
     let mut fails_in_a_row = 0;
 
-    for (i, it) in items.iter().enumerate() {
+    for (i, job) in jobs.iter().enumerate() {
         let _ = app.emit("ird-progress", Progress { done: i, total });
-        match download_one(&app, &session, &token, &dir, &pan, it).await {
+        match download_one(app, session, &dir, job).await {
             Ok(name) => {
                 fails_in_a_row = 0;
-                results.push(DlResult { tran_no: it.tran_no.clone(), ok: true, detail: name });
+                results.push(DlResult { tran_no: job.id.clone(), ok: true, detail: name });
             }
             Err(e) => {
                 fails_in_a_row += 1;
-                results.push(DlResult { tran_no: it.tran_no.clone(), ok: false, detail: e });
+                results.push(DlResult { tran_no: job.id.clone(), ok: false, detail: e });
                 if fails_in_a_row >= MAX_CONSECUTIVE_FAILS {
-                    for rest in &items[i + 1..] {
+                    for rest in &jobs[i + 1..] {
                         results.push(DlResult {
-                            tran_no: rest.tran_no.clone(),
+                            tran_no: rest.id.clone(),
                             ok: false,
                             detail: "skipped: stopped after repeated failures".into(),
                         });
@@ -237,16 +270,16 @@ pub async fn ird_download_tds(
         tokio::time::sleep(std::time::Duration::from_millis(GAP_MS)).await;
     }
     let _ = app.emit("ird-progress", Progress { done: total, total });
-    Ok(results)
+    results
 }
 
-async fn run_curl(ua: &str, cookies: &str, token: &str, it: &TdsPick, out: &std::path::Path) -> Result<(), String> {
+async fn run_curl(ua: &str, cookies: &str, rep: &Report, out: &std::path::Path) -> Result<(), String> {
     let curl = std::path::Path::new(r"C:\Windows\System32\curl.exe");
     if !curl.exists() {
         return Err("curl.exe not found".into());
     }
-    let status = tokio::process::Command::new(curl)
-        .arg("-s")
+    let mut cmd = tokio::process::Command::new(curl);
+    cmd.arg("-s")
         .arg("-L")
         .arg("--max-redirs").arg("5")
         .arg("--max-time").arg("60")
@@ -254,11 +287,12 @@ async fn run_curl(ua: &str, cookies: &str, token: &str, it: &TdsPick, out: &std:
         .arg("-A").arg(ua)
         .arg("-b").arg(cookies)
         .arg("-H").arg(format!("Referer: {REFERER}"))
-        .arg("-H").arg(format!("Origin: {ORIGIN}"))
-        .arg("--data-urlencode").arg(format!("TranNo={}", it.tran_no))
-        .arg("--data-urlencode").arg(format!("Status={}", it.status))
-        .arg("--data-urlencode").arg(format!("formToken={token}"))
-        .arg(format!("{ORIGIN}/Reporting/TDS/ReportHandlers/TDSSubmissionReportHandler.ashx"))
+        .arg("-H").arg(format!("Origin: {ORIGIN}"));
+    for (k, v) in &rep.fields {
+        cmd.arg("--data-urlencode").arg(format!("{k}={v}"));
+    }
+    let status = cmd
+        .arg(format!("{ORIGIN}{}", rep.path))
         .creation_flags(0x0800_0000)
         .status()
         .await
@@ -272,19 +306,15 @@ async fn run_curl(ua: &str, cookies: &str, token: &str, it: &TdsPick, out: &std:
 async fn run_flow(
     client: &reqwest::Client,
     static_cookies: Option<&str>,
-    token: &str,
-    it: &TdsPick,
+    rep: &Report,
 ) -> (Vec<u8>, String) {
     let mut trail: Vec<String> = Vec::new();
+    let form: Vec<(&str, &str)> = rep.fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let mut req = client
-        .post(format!("{ORIGIN}/Reporting/TDS/ReportHandlers/TDSSubmissionReportHandler.ashx"))
+        .post(format!("{ORIGIN}{}", rep.path))
         .header("Referer", REFERER)
         .header("Origin", ORIGIN)
-        .form(&[
-            ("TranNo", it.tran_no.as_str()),
-            ("Status", it.status.as_str()),
-            ("formToken", token),
-        ]);
+        .form(&form);
     if let Some(c) = static_cookies {
         req = req.header("Cookie", c);
     }
@@ -338,27 +368,33 @@ async fn download_via_portal(
     app: &tauri::AppHandle,
     dir: &std::path::Path,
     name: &str,
-    token: &str,
-    it: &TdsPick,
+    rep: &Report,
 ) -> Result<(), String> {
-    let token_ok = !token.is_empty()
-        && token.len() <= 200
-        && token.chars().all(|c| c.is_ascii_alphanumeric() || "-_.=+/".contains(c));
-    if !token_ok {
-        return Err("bad form token".into());
+    let js_safe = |v: &str| {
+        !v.is_empty()
+            && v.len() <= 200
+            && v.chars().all(|c| c.is_ascii_alphanumeric() || "-_.=+/".contains(c))
+    };
+    if !js_safe(name) || rep.fields.iter().any(|(_, v)| !js_safe(v)) {
+        return Err("bad form value".into());
     }
     let win = app
         .get_webview_window(IRD_LABEL)
         .ok_or("portal window is closed")?;
     let target = dir.join(format!("{name}.pdf"));
     let _ = std::fs::remove_file(&target);
+    let pairs = rep
+        .fields
+        .iter()
+        .map(|(k, v)| format!("['{k}','{v}']"))
+        .collect::<Vec<_>>()
+        .join(",");
     let js = format!(
         r#"(function(){{var f=document.createElement('form');f.method='POST';f.target='{name}';
-f.action='/Reporting/TDS/ReportHandlers/TDSSubmissionReportHandler.ashx';
-[['TranNo','{tran}'],['Status','{status}'],['formToken','{token}']].forEach(function(p){{var i=document.createElement('input');i.type='hidden';i.name=p[0];i.value=p[1];f.appendChild(i);}});
+f.action='{path}';
+[{pairs}].forEach(function(p){{var i=document.createElement('input');i.type='hidden';i.name=p[0];i.value=p[1];f.appendChild(i);}});
 document.body.appendChild(f);f.submit();f.remove();}})();"#,
-        tran = it.tran_no,
-        status = it.status,
+        path = rep.path,
     );
     super::HIDE_POPUPS.store(true, std::sync::atomic::Ordering::Relaxed);
     win.eval(&js).map_err(|e| e.to_string())?;
@@ -387,23 +423,19 @@ document.body.appendChild(f);f.submit();f.remove();}})();"#,
 async fn download_one(
     app: &tauri::AppHandle,
     session: &Session,
-    token: &str,
     dir: &std::path::Path,
-    pan: &str,
-    it: &TdsPick,
+    job: &Job,
 ) -> Result<String, String> {
-    if !safe(&it.tran_no) || !safe(&it.status) {
-        return Err("bad row".into());
-    }
-    let name = format!("TDS_{pan}_{}.pdf", it.tran_no);
+    let name = format!("{}.pdf", job.name);
     let target = dir.join(&name);
+    let rep = &job.report;
 
     let mut curl_err = String::new();
     for attempt in 0..CURL_ATTEMPTS {
         if attempt > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(RETRY_GAP_MS)).await;
         }
-        match run_curl(&session.ua, &session.cookie_header, token, it, &target).await {
+        match run_curl(&session.ua, &session.cookie_header, rep, &target).await {
             Ok(()) => match std::fs::read(&target) {
                 Ok(b) if b.starts_with(b"%PDF-") => return Ok(name),
                 Ok(b) => curl_err = format!("curl got {} bytes, not a PDF (try {})", b.len(), attempt + 1),
@@ -417,13 +449,13 @@ async fn download_one(
     }
     let _ = std::fs::remove_file(&target);
 
-    let nav_err = match download_via_portal(app, dir, name.trim_end_matches(".pdf"), token, it).await {
+    let nav_err = match download_via_portal(app, dir, &job.name, rep).await {
         Ok(()) => return Ok(name),
         Err(e) => e,
     };
     let _ = std::fs::remove_file(&target);
 
-    let (bytes, trail) = run_flow(&session.jar_client, None, token, it).await;
+    let (bytes, trail) = run_flow(&session.jar_client, None, rep).await;
     if bytes.starts_with(b"%PDF-") {
         std::fs::write(&target, &bytes).map_err(|e| e.to_string())?;
         return Ok(name);

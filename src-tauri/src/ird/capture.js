@@ -11,7 +11,7 @@
       if (head !== "%PDF-") return;
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = (window.__irdName || (/^TDS_/.test(window.name) ? window.name : "") || "IRD_report_" + Date.now()) + ".pdf";
+      a.download = (window.__irdName || (/(^TDS_|_VAT_)/.test(window.name) ? window.name : "") || "IRD_report_" + Date.now()) + ".pdf";
       document.body.appendChild(a);
       a.click();
       a.remove();
