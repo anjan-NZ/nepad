@@ -1,4 +1,5 @@
-use super::tds::{after, portal_rejected, run_batch, safe, session_client, DlResult, Job, Report, ORIGIN, REFERER};
+use super::downloads_dir;
+use super::tds::{after, client_folder, folder_for, portal_rejected, run_batch, safe, session_client, DlResult, Job, Report, ORIGIN, REFERER};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -37,6 +38,14 @@ fn file_stem(it: &VatPick, pan: &str) -> String {
         (fp, _) => format!("{fp}{}", it.period),
     };
     format!("{label}_{}_VAT_{pan}", it.tax_year)
+}
+
+fn fiscal_year(it: &VatPick) -> String {
+    let (Ok(y), Ok(m)) = (it.tax_year.parse::<u32>(), it.period.parse::<u32>()) else {
+        return String::new();
+    };
+    let start = if it.filing_period == "M" && m < 4 { y.saturating_sub(1) } else { y };
+    format!("{start}-{:02}", (start + 1) % 100)
 }
 
 fn unique_name(seen: &mut HashMap<String, usize>, stem: String) -> String {
@@ -115,6 +124,7 @@ pub async fn ird_download_vat(
     pan: String,
     items: Vec<VatPick>,
     ua: String,
+    company: String,
 ) -> Result<Vec<DlResult>, String> {
     if !safe(&pan) {
         return Err("Bad PAN".into());
@@ -127,10 +137,12 @@ pub async fn ird_download_vat(
     }
     let session = session_client(&app, &ua)?;
     let mut seen: HashMap<String, usize> = HashMap::new();
+    let client = client_folder(&downloads_dir(&app), &company, &pan);
     let jobs = items
         .into_iter()
         .map(|it| Job {
             name: unique_name(&mut seen, file_stem(&it, &pan)),
+            folder: folder_for(&client, "VAT", &fiscal_year(&it)),
             id: it.submission_no.clone(),
             report: Report {
                 path: "/Reporting/Vat/ReportHandlers/Returns/FinalizedReturns.ashx",
@@ -147,4 +159,20 @@ pub async fn ird_download_vat(
         })
         .collect();
     Ok(run_batch(&app, &session, jobs).await)
+}
+
+#[cfg(test)]
+mod fy_tests {
+    use super::{fiscal_year, VatPick};
+
+    fn pick(y: &str, m: &str) -> VatPick {
+        VatPick { submission_no: "1".into(), tax_year: y.into(), filing_period: "M".into(), period: m.into() }
+    }
+
+    #[test]
+    fn shrawan_starts_the_fiscal_year() {
+        assert_eq!(fiscal_year(&pick("2081", "12")), "2081-82");
+        assert_eq!(fiscal_year(&pick("2082", "2")), "2081-82");
+        assert_eq!(fiscal_year(&pick("2082", "4")), "2082-83");
+    }
 }

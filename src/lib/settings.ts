@@ -4,6 +4,8 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { getSettings, setSetting, Settings } from "./store";
 import { checkForUpdate, installUpdate } from "./updater";
 import { getVersion } from "@tauri-apps/api/app";
+import { emit } from "@tauri-apps/api/event";
+import { GLASS_CHANGED_EVENT } from "./glass";
 
 const LINKEDIN_URL = "https://www.linkedin.com/in/anjan-simkhada/";
 
@@ -32,6 +34,19 @@ export async function renderSettings(
       <div class="setting-hint">
         Off by default. A small glowing line you can drag anywhere along a screen edge,
         click it to open NePad.
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Glass</h2>
+      <div class="glass-seg" id="set-glass" role="radiogroup" aria-label="Glass strength">
+        <button type="button" class="glass-seg-btn" data-strength="clear" role="radio">Clear</button>
+        <button type="button" class="glass-seg-btn" data-strength="balanced" role="radio">Balanced</button>
+        <button type="button" class="glass-seg-btn" data-strength="frosted" role="radio">Frosted</button>
+      </div>
+      <div class="setting-hint">
+        Clear shows more of what is behind the panel, Frosted (default) is closest to solid. Colours
+        follow your Windows light/dark mode and accent colour.
       </div>
     </section>
 
@@ -111,6 +126,23 @@ export async function renderSettings(
     await setSetting("edgeStripEnabled", edgeStrip.checked);
     await invoke("set_window_visible", { label: "edge-strip", visible: edgeStrip.checked });
   });
+
+  const glassBtns = root.querySelectorAll<HTMLButtonElement>(".glass-seg-btn");
+  const markGlass = (value: string) =>
+    glassBtns.forEach((b) => {
+      const on = b.dataset.strength === value;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-checked", String(on));
+    });
+  markGlass(settings.glassStrength);
+  glassBtns.forEach((b) =>
+    b.addEventListener("click", async () => {
+      const value = b.dataset.strength as Settings["glassStrength"];
+      markGlass(value);
+      await setSetting("glassStrength", value);
+      await emit(GLASS_CHANGED_EVENT);
+    }),
+  );
 
   const autoUpdate = root.querySelector<HTMLInputElement>("#set-auto-update")!;
   const checkUpdateBtn = root.querySelector<HTMLButtonElement>("#set-check-update")!;

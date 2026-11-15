@@ -27,6 +27,7 @@ export interface Settings {
   autoUpdateCheck: boolean;
   timerToastPos: { x: number; y: number } | null;
   theme: "dark" | "light";
+  glassStrength: "clear" | "balanced" | "frosted";
 }
 
 export interface Reminder {
@@ -47,6 +48,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoUpdateCheck: false,
   timerToastPos: null,
   theme: "dark",
+  glassStrength: "frosted",
 };
 
 const EMPTY_DAY: DayData = { tasks: [], journal: "", notes: "" };

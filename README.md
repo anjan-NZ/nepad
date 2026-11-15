@@ -21,11 +21,12 @@ The tools that look things up do talk to the IRD's own public website
 1. TDS return extraction (straight into Excel)
 2. PAN bulk search
 3. VAT return extraction
-4. IRD TDS and VAT downloader (see the note below)
-5. BS Calendar / date conversion
+4. IRD TDS and VAT downloader, plus Paid Voucher List and Annex 10 export to Excel (see the note below)
+5. BS Calendar / date conversion, with the month's holidays listed and the next one marked
 6. Daily journal
 7. Stopwatch, timer, and reminders
-8. More will be added as per relevancy...
+8. Frosted glass look that follows your Windows light/dark mode and accent colour
+9. More will be added as per relevancy...
 
 ## IRD TDS and VAT downloader
 
@@ -36,6 +37,31 @@ Once you are logged in, pick TDS or VAT, enter a PAN and choose a fiscal
 year (or a span of years, or a custom range) to list that taxpayer's
 submitted returns and save the ones you pick to `Downloads\IRD Downloads`.
 VAT files are named like `Bhadra_2083_VAT_<PAN>.pdf`.
+
+You can also pick **Paid Voucher List** or **Annex 10 vouchers** as the type.
+These are saved as Excel files, not PDFs. Annex 10 gives one file per fiscal year.
+
+Every client gets its own folder, sorted by type and fiscal year:
+
+```
+Downloads\IRD Downloads\
+  ABC Traders Pvt Ltd (301234567)\
+    TDS\2081-82\
+    VAT\2081-82\
+    Vouchers\2081-82\
+    Annex10\2081-82\
+```
+
+The name comes from the PAN lookup. If the lookup is down that day the files
+still go into the client's existing folder since it's found by the PAN in
+brackets. For a new client the folder is just the PAN for now and it gets
+renamed once the lookup works again, so one client never ends up in two folders.
+
+## Look
+
+NePad uses a frosted glass panel that follows your Windows light or dark mode
+and your accent colour. You can change how strong the glass is in
+**Settings → Glass** (Clear, Balanced or Frosted, default Frosted).
 
 **If a return is refused:** on some networks the portal turns down a
 download now and then. NePad retries each refused return automatically; if

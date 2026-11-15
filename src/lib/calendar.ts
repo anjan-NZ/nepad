@@ -100,9 +100,33 @@ root.innerHTML = `
       monthHolidaysEl.innerHTML = "";
       return;
     }
-    monthHolidaysEl.innerHTML = entries
-      .map((e) => `<div class="cal-month-holiday-row"><span>${e.day} ${BS_MONTHS[monthIndex]}</span><span>${escapeHtml(e.name)}</span></div>`)
-      .join("");
+    const todayKey = adKey(new Date());
+    const upcoming: string[] = [];
+    const earlier: string[] = [];
+    for (const e of entries) {
+      const ad = bsDayToAd(year, monthIndex, e.day);
+      const key = adKey(ad);
+      const past = key < todayKey;
+      let cls = "cal-month-holiday-row";
+      if (past) cls += " past";
+      else if (upcoming.length === 0) cls += key === todayKey ? " today" : " next";
+      const when = ad.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+      const tag = key === todayKey ? "Today" : upcoming.length === 0 && !past ? "Next" : "";
+      const row = `<div class="${cls}">
+          <span class="hol-text">
+            <span class="hol-name">${escapeHtml(e.name)}</span>
+            <span class="hol-when">${when}${tag ? `<em>${tag}</em>` : ""}</span>
+          </span>
+          <span class="hol-day"><b>${e.day}</b>${BS_MONTHS[monthIndex]}</span>
+        </div>`;
+      (past ? earlier : upcoming).push(row);
+    }
+    const head = `<div class="cal-month-holidays-head"><span>Holidays this month</span><span>${entries.length}</span></div>`;
+    const earlierBlock =
+      earlier.length && upcoming.length
+        ? `<details class="hol-earlier"><summary>Earlier this month <span>${earlier.length}</span></summary><div class="hol-earlier-list">${earlier.join("")}</div></details>`
+        : earlier.join("");
+    monthHolidaysEl.innerHTML = head + upcoming.join("") + earlierBlock;
   }
 
   async function refreshDots() {
@@ -120,7 +144,6 @@ root.innerHTML = `
         `;
       });
     } catch {
-      // ignore
     }
   }
 

@@ -20,8 +20,10 @@ import { initEdgeStrip } from "./lib/edgeStrip";
 import { initReminderToast } from "./lib/reminderToast";
 import { initTimerToast } from "./lib/timerToast";
 import { checkForUpdate } from "./lib/updater";
+import { initGlass } from "./lib/glass";
 
 const isEdgeStrip = location.hash === "#edge-strip";
+if (!isEdgeStrip) void initGlass();
 if (isEdgeStrip) {
   document.body.classList.add("is-edge-strip");
   void initEdgeStrip();
@@ -224,16 +226,6 @@ document.querySelector("#day-today")!.addEventListener("click", () => {
 document.querySelector("#hide-btn")!.addEventListener("click", () => {
   invoke("toggle_panel");
 });
-const themeToggleBtn = document.querySelector<HTMLButtonElement>("#theme-toggle-btn")!;
-function applyTheme(theme: "dark" | "light") {
-  document.documentElement.setAttribute("data-theme", theme);
-  themeToggleBtn.innerHTML = theme === "dark" ? "&#9788;" : "&#9789;";
-}
-themeToggleBtn.addEventListener("click", async () => {
-  const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-  applyTheme(next);
-  await setSetting("theme", next);
-});
 document.querySelector("#date-block")!.addEventListener("click", () => {
   setView("calendar");
 });
@@ -258,7 +250,6 @@ async function checkForUpdateOnLaunch() {
 
 async function bootstrap() {
   const settings = await getStartupSettings();
-  applyTheme(settings.theme);
   showDualDate = settings.showDualDate;
   applyTabOrder(settings.tabOrder);
   setupTabReorder();

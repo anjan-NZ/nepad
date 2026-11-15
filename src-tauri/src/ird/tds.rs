@@ -203,7 +203,89 @@ pub(super) struct Report {
 pub(super) struct Job {
     pub id: String,
     pub name: String,
+    pub folder: String,
     pub report: Report,
+}
+
+fn clean_part(s: &str) -> String {
+    let swapped: String = s
+        .chars()
+        .map(|c| if c.is_control() || ['<', '>', ':', '"', '/', '\\', '|', '?', '*'].contains(&c) { ' ' } else { c })
+        .collect();
+    let joined = swapped.split_whitespace().collect::<Vec<_>>().join(" ");
+    joined.trim_matches(|c: char| c == '.' || c == ' ').chars().take(80).collect::<String>().trim_end().to_string()
+}
+
+pub(super) fn client_folder(base: &std::path::Path, company: &str, pan: &str) -> String {
+    let name = clean_part(company);
+    let suffix = format!(" ({pan})");
+    let mut named: Option<String> = None;
+    let mut bare = false;
+    if let Ok(rd) = std::fs::read_dir(base) {
+        for e in rd.flatten() {
+            if !e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let n = e.file_name().to_string_lossy().into_owned();
+            if n == pan {
+                bare = true;
+            } else if named.is_none() && n.ends_with(&suffix) {
+                named = Some(n);
+            }
+        }
+    }
+    if let Some(n) = named {
+        if bare {
+            merge_into(&base.join(pan), &base.join(&n));
+        }
+        return n;
+    }
+    if name.is_empty() {
+        return pan.to_string();
+    }
+    let wanted = format!("{name}{suffix}");
+    if bare && std::fs::rename(base.join(pan), base.join(&wanted)).is_err() {
+        return pan.to_string();
+    }
+    wanted
+}
+
+fn merge_into(from: &std::path::Path, to: &std::path::Path) {
+    let Ok(rd) = std::fs::read_dir(from) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let src = e.path();
+        let dst = to.join(e.file_name());
+        if src.is_dir() {
+            let _ = std::fs::create_dir_all(&dst);
+            merge_into(&src, &dst);
+        } else if !dst.exists() {
+            let _ = std::fs::rename(&src, &dst);
+        }
+    }
+    let _ = std::fs::remove_dir(from);
+}
+
+pub(super) fn folder_for(client: &str, kind: &str, fy: &str) -> String {
+    let mut path = format!("{client}/{kind}");
+    if !fy.is_empty() && fy.chars().all(|c| c.is_ascii_digit() || c == '-') {
+        path.push('/');
+        path.push_str(fy);
+    }
+    path
+}
+
+fn file_into_folder(base: &std::path::Path, folder: &str, name: &str) -> Result<(), String> {
+    let dest_dir = folder.split('/').fold(base.to_path_buf(), |p, part| p.join(part));
+    std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+    let from = base.join(name);
+    let to = dest_dir.join(name);
+    if std::fs::rename(&from, &to).is_err() {
+        std::fs::copy(&from, &to).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&from);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -212,6 +294,8 @@ pub async fn ird_download_tds(
     pan: String,
     items: Vec<TdsPick>,
     ua: String,
+    company: String,
+    fy: String,
 ) -> Result<Vec<DlResult>, String> {
     if !safe(&pan) {
         return Err("Bad PAN".into());
@@ -221,10 +305,12 @@ pub async fn ird_download_tds(
     }
     let session = session_client(&app, &ua)?;
     let token = form_token(&session.jar_client).await;
+    let folder = folder_for(&client_folder(&downloads_dir(&app), &company, &pan), "TDS", &fy);
     let jobs = items
         .into_iter()
         .map(|it| Job {
             name: format!("TDS_{pan}_{}", it.tran_no),
+            folder: folder.clone(),
             id: it.tran_no.clone(),
             report: Report {
                 path: "/Reporting/TDS/ReportHandlers/TDSSubmissionReportHandler.ashx",
@@ -250,6 +336,7 @@ pub(super) async fn run_batch(app: &tauri::AppHandle, session: &Session, jobs: V
         match download_one(app, session, &dir, job).await {
             Ok(name) => {
                 fails_in_a_row = 0;
+                let _ = file_into_folder(&dir, &job.folder, &name);
                 results.push(DlResult { tran_no: job.id.clone(), ok: true, detail: name });
             }
             Err(e) => {
@@ -461,4 +548,52 @@ async fn download_one(
         return Ok(name);
     }
     Err(format!("{nav_err}; {curl_err}; fallback: {trail}"))
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::{client_folder, folder_for};
+    use std::fs;
+
+    fn tmp(tag: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("nepad-ft-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn year_level_is_validated() {
+        assert_eq!(folder_for("X (1)", "VAT", "2081-82"), "X (1)/VAT/2081-82");
+        assert_eq!(folder_for("601466803", "TDS", ""), "601466803/TDS");
+        assert_eq!(folder_for("601466803", "TDS", "../x"), "601466803/TDS");
+    }
+
+    #[test]
+    fn names_are_cleaned_and_fall_back_to_pan() {
+        let d = tmp("clean");
+        assert_eq!(client_folder(&d, "Airline Reps Nepal Pvt.Ltd.", "601466803"), "Airline Reps Nepal Pvt.Ltd (601466803)");
+        assert_eq!(client_folder(&d, "A/B: C*", "1"), "A B C (1)");
+        assert_eq!(client_folder(&d, "", "601466803"), "601466803");
+        assert_eq!(client_folder(&d, "..", "601466803"), "601466803");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn lookup_failure_never_splits_a_client() {
+        let d = tmp("split");
+        fs::create_dir_all(d.join("123456789/TDS/2081-82")).unwrap();
+        fs::write(d.join("123456789/TDS/2081-82/a.pdf"), b"x").unwrap();
+        assert_eq!(client_folder(&d, "ABC Traders", "123456789"), "ABC Traders (123456789)");
+        assert!(d.join("ABC Traders (123456789)/TDS/2081-82/a.pdf").exists());
+        assert!(!d.join("123456789").exists());
+        assert_eq!(client_folder(&d, "", "123456789"), "ABC Traders (123456789)");
+        assert_eq!(client_folder(&d, "ABC Traders Pvt Ltd", "123456789"), "ABC Traders (123456789)");
+        fs::create_dir_all(d.join("123456789/VAT")).unwrap();
+        fs::write(d.join("123456789/VAT/b.pdf"), b"y").unwrap();
+        assert_eq!(client_folder(&d, "", "123456789"), "ABC Traders (123456789)");
+        assert!(d.join("ABC Traders (123456789)/VAT/b.pdf").exists());
+        assert!(!d.join("123456789").exists());
+        let _ = fs::remove_dir_all(&d);
+    }
 }

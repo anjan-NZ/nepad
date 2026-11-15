@@ -158,6 +158,100 @@ fn spawn_reminder_toast(app: &tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn apply_glass(window: tauri::WebviewWindow, strength: String) -> bool {
+    let dark = !matches!(window.theme(), Ok(tauri::Theme::Light));
+    let a: u32 = match strength.as_str() {
+        "clear" => 0x78,
+        "frosted" => 0xE8,
+        _ => 0xC0,
+    };
+    let (r, g, b) = if dark {
+        (22u32, 22u32, 32u32)
+    } else {
+        (244, 246, 251)
+    };
+    let Ok(hwnd) = window.hwnd() else {
+        return false;
+    };
+    glass::set_acrylic(hwnd.0 as isize, r | (g << 8) | (b << 16) | (a << 24))
+}
+
+#[tauri::command]
+fn system_accent() -> Option<[u8; 3]> {
+    #[cfg(windows)]
+    {
+        use winreg::enums::HKEY_CURRENT_USER;
+        use winreg::RegKey;
+        let key = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey("Software\\Microsoft\\Windows\\DWM")
+            .ok()?;
+        let abgr: u32 = key.get_value("AccentColor").ok()?;
+        Some([
+            (abgr & 0xFF) as u8,
+            ((abgr >> 8) & 0xFF) as u8,
+            ((abgr >> 16) & 0xFF) as u8,
+        ])
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+#[cfg(windows)]
+mod glass {
+    use std::ffi::c_void;
+
+    #[repr(C)]
+    struct AccentPolicy {
+        state: u32,
+        flags: u32,
+        gradient: u32,
+        animation: u32,
+    }
+
+    #[repr(C)]
+    struct CompositionData {
+        attrib: u32,
+        data: *mut c_void,
+        size: usize,
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetModuleHandleA(name: *const u8) -> *mut c_void;
+        fn LoadLibraryA(name: *const u8) -> *mut c_void;
+        fn GetProcAddress(module: *mut c_void, name: *const u8) -> *mut c_void;
+    }
+
+    type SetWca = unsafe extern "system" fn(isize, *mut CompositionData) -> i32;
+
+    pub fn set_acrylic(hwnd: isize, abgr: u32) -> bool {
+        unsafe {
+            let mut user32 = GetModuleHandleA(b"user32.dll\0".as_ptr());
+            if user32.is_null() {
+                user32 = LoadLibraryA(b"user32.dll\0".as_ptr());
+            }
+            if user32.is_null() {
+                return false;
+            }
+            let f = GetProcAddress(user32, b"SetWindowCompositionAttribute\0".as_ptr());
+            if f.is_null() {
+                return false;
+            }
+            let set: SetWca = std::mem::transmute(f);
+            let mut policy = AccentPolicy { state: 4, flags: 0, gradient: abgr, animation: 0 };
+            let mut data = CompositionData {
+                attrib: 0x13,
+                data: &mut policy as *mut _ as *mut c_void,
+                size: std::mem::size_of::<AccentPolicy>(),
+            };
+            set(hwnd, &mut data) != 0
+        }
+    }
+}
+
+#[tauri::command]
 fn show_reminder_toast(app: tauri::AppHandle, text: String) -> Result<(), String> {
     spawn_reminder_toast(&app);
     let win = app
@@ -788,6 +882,8 @@ pub fn run() {
             erase_data_and_uninstall,
             set_window_visible,
             move_window,
+            apply_glass,
+            system_accent,
             show_reminder_toast,
             show_timer_toast,
             ird::ird_open_portal,
@@ -797,6 +893,8 @@ pub fn run() {
             ird::tds::ird_download_tds,
             ird::vat::ird_list_vat,
             ird::vat::ird_download_vat,
+            ird::export::ird_export_vouchers,
+            ird::export::ird_export_annex10,
             ird::ird_logout,
             ird::ird_portal_pan,
         ])

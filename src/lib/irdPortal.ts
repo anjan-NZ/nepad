@@ -23,7 +23,13 @@ interface ListRow {
   item: Record<string, string>;
 }
 
-type IrdKind = "tds" | "vat";
+type IrdKind = "tds" | "vat" | "vouchers" | "annex";
+
+interface ExportResult {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
 
 interface DlResult {
   tranNo: string;
@@ -63,6 +69,8 @@ export function renderIrdPortal(root: HTMLElement): void {
           <select id="ird-type" title="Return type">
             <option value="tds">TDS</option>
             <option value="vat">VAT</option>
+            <option value="vouchers">Paid Voucher List</option>
+            <option value="annex">Annex 10 vouchers</option>
           </select>
           <input type="text" id="ird-pan" placeholder="PAN" maxlength="9" autocomplete="off" />
         </div>
@@ -159,6 +167,7 @@ export function renderIrdPortal(root: HTMLElement): void {
     errEl.classList.add("hidden");
     try {
       await invoke("ird_open_portal");
+      if (wasReady) return;
       window.clearInterval(timer);
       void checkSession();
       timer = window.setInterval(() => void checkSession(), POLL_MS);
@@ -233,7 +242,8 @@ export function renderIrdPortal(root: HTMLElement): void {
   }
   const fySel = $<HTMLSelectElement>("ird-fy");
   const fyToSel = $<HTMLSelectElement>("ird-fy-to");
-  const kind = (): IrdKind => (typeSel.value === "vat" ? "vat" : "tds");
+  const kind = (): IrdKind => (["vat", "vouchers", "annex"].includes(typeSel.value) ? (typeSel.value as IrdKind) : "tds");
+  const isExport = () => kind() === "vouchers" || kind() === "annex";
 
   const now = new Date();
   const bsYear = now.getFullYear() + ((now.getMonth() === 3 && now.getDate() >= 14) || now.getMonth() > 3 ? 57 : 56);
@@ -269,7 +279,12 @@ export function renderIrdPortal(root: HTMLElement): void {
 
   function applyType() {
     const vat = kind() === "vat";
-    hintEl.textContent = vat
+    const exp = isExport();
+    hintEl.textContent = kind() === "annex"
+      ? "Enter the PAN and pick a fiscal year (or two for a span). Each year is saved as its own Excel file."
+      : kind() === "vouchers"
+        ? "Enter the PAN and pick a fiscal year (or two for a span), or type a Nepali date range. Saved as one Excel file."
+        : vat
       ? "Enter the PAN. The portal lists every VAT return for it; pick a fiscal year (or two for a span), or type a month range like 2081.04 to 2082.03."
       : "Enter the PAN and pick a fiscal year (or two for a span), or type a Nepali date range.";
     fromInput.placeholder = vat ? "From month (optional)" : "From (BS)";
@@ -282,7 +297,11 @@ export function renderIrdPortal(root: HTMLElement): void {
     rows = [];
     listEl.innerHTML = "";
     msgEl.textContent = "";
-    goBtn.disabled = allBtn.disabled = true;
+    allBtn.disabled = true;
+    goBtn.disabled = !exp;
+    goBtn.textContent = exp ? "Export to Excel" : "Download selected";
+    searchBtn.hidden = allBtn.hidden = exp;
+    fromInput.hidden = toInput.hidden = kind() === "annex";
   }
   typeSel.addEventListener("change", applyType);
   applyType();
@@ -325,6 +344,14 @@ export function renderIrdPortal(root: HTMLElement): void {
     const m = /^(\d{4})\.(0?[1-9]|1[0-2])$/.exec(v);
     return m ? Number(m[1]) * 12 + Number(m[2]) - 1 : NaN;
   };
+
+  function tdsFy(): string {
+    const m = /^(\d{4})\.(\d{1,2})/.exec(fromInput.value.trim());
+    const y = Number(fySel.value) || Number(fyToSel.value) || (m ? Number(m[1]) - (Number(m[2]) < 4 ? 1 : 0) : 0);
+    const lo = Math.min(Number(fySel.value) || Infinity, Number(fyToSel.value) || Infinity);
+    const start = Number.isFinite(lo) ? lo : y;
+    return start ? `${start}-${String((start + 1) % 100).padStart(2, "0")}` : "";
+  }
 
   async function fetchRows(pan: string): Promise<ListRow[]> {
     const from = fromInput.value.trim();
@@ -393,15 +420,60 @@ export function renderIrdPortal(root: HTMLElement): void {
     boxes.forEach((b) => (b.checked = anyOff));
   });
 
+  async function exportExcel() {
+    const pan = panInput.value.trim();
+    if (!pan) {
+      msgEl.textContent = "Enter the PAN first.";
+      return;
+    }
+    const a = Number(fySel.value) || Number(fyToSel.value);
+    const b = Number(fyToSel.value) || a;
+    goBtn.disabled = true;
+    busy = true;
+    setLocked(true);
+    try {
+      if (!names.get(pan)) await showName(pan);
+      const company = names.get(pan) ?? "";
+      let res: ExportResult[];
+      if (kind() === "annex") {
+        if (!a) throw new Error("Pick a fiscal year.");
+        const years = Array.from({ length: Math.abs(b - a) + 1 }, (_, i) => Math.min(a, b) + i);
+        msgEl.textContent = "Exporting...";
+        res = await invoke<ExportResult[]>("ird_export_annex10", { pan, years, ua, company });
+      } else {
+        const from = fromInput.value.trim();
+        const to = toInput.value.trim();
+        if (!from || !to) throw new Error("Pick a fiscal year or enter the from and to dates.");
+        msgEl.textContent = "Exporting...";
+        res = [await invoke<ExportResult>("ird_export_vouchers", { pan, from, to, ua, company, fy: tdsFy() })];
+      }
+      listEl.innerHTML = `<table class="pan-table"><tbody>${res
+        .map((r) => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.ok ? "Saved, " + r.detail : r.detail)}</td></tr>`)
+        .join("")}</tbody></table>`;
+      const ok = res.filter((r) => r.ok).length;
+      msgEl.textContent = `Done: ${ok} saved` + (ok < res.length ? `, ${res.length - ok} failed` : "");
+    } catch (e) {
+      msgEl.textContent = e instanceof Error ? e.message : String(e);
+    }
+    busy = false;
+    setLocked(false);
+    goBtn.disabled = false;
+  }
+
   goBtn.addEventListener("click", async () => {
+    if (isExport()) return void exportExcel();
     const items = picked().map((r) => r.item);
     if (items.length === 0) return;
     goBtn.disabled = true;
     busy = true;
     setLocked(true);
     try {
-      const cmd = kind() === "vat" ? "ird_download_vat" : "ird_download_tds";
-      const res = await invoke<DlResult[]>(cmd, { pan: listedPan, items, ua });
+      if (!names.get(listedPan)) await showName(listedPan);
+      const company = names.get(listedPan) ?? "";
+      const res =
+        kind() === "vat"
+          ? await invoke<DlResult[]>("ird_download_vat", { pan: listedPan, items, ua, company })
+          : await invoke<DlResult[]>("ird_download_tds", { pan: listedPan, items, ua, company, fy: tdsFy() });
       res.forEach((r) => {
         const cell = listEl.querySelector<HTMLElement>(`td[data-tran="${CSS.escape(r.tranNo)}"]`);
         if (cell) {
