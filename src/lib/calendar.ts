@@ -33,9 +33,9 @@ export function renderCalendar(
 root.innerHTML = `
     <section class="card calendar-card">
       <div class="calendar-header">
-        <button type="button" id="cal-prev" class="icon-btn">&#8249;</button>
-        <button type="button" id="cal-title" class="calendar-title"></button>
-        <button type="button" id="cal-next" class="icon-btn">&#8250;</button>
+        <button type="button" id="cal-prev" class="icon-btn" aria-label="Previous month">&#8249;</button>
+        <button type="button" id="cal-title" class="calendar-title" aria-label="Choose month and year"></button>
+        <button type="button" id="cal-next" class="icon-btn" aria-label="Next month">&#8250;</button>
         <button type="button" id="cal-today" class="icon-btn cal-today-btn">Today</button>
       </div>
       <div id="cal-picker" class="calendar-picker hidden">
@@ -228,6 +228,12 @@ root.innerHTML = `
         cell.type = "button";
         cell.dataset.key = key;
         if (holidayName) cell.title = holidayName;
+        const weekdayName = adDate.toLocaleDateString("en-US", { weekday: "long" });
+        cell.setAttribute(
+          "aria-label",
+          `${day} ${BS_MONTHS[monthIndex]} ${year}, ${weekdayName}` +
+            (holidayName ? `, ${holidayName}` : ""),
+        );
         cell.className =
           "cal-cell" +
           (key === todayKey ? " today" : "") +
@@ -256,7 +262,7 @@ root.innerHTML = `
         grid.appendChild(cell);
       }
     } catch (err) {
-      grid.innerHTML = `<div class="conv-error" style="grid-column: 1 / -1;">Calendar error: ${(err as Error).message ?? String(err)}</div>`;
+      grid.innerHTML = `<div class="conv-error" style="grid-column: 1 / -1;">Calendar error: ${escapeHtml((err as Error).message ?? String(err))}</div>`;
     }
   }
 

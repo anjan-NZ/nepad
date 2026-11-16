@@ -1,0 +1,180 @@
+.tools-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tools-top .tools-search {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.tools-arrange-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tools-arrange-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.tools-arrange-title {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tool-chips {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top-color: var(--glass-edge);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.tool-chips:empty {
+  display: none;
+}
+
+.tool-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 7px 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tool-chip.hidden {
+  display: none;
+}
+
+.tool-chip svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tool-chip span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-chip.on {
+  color: var(--text);
+}
+
+.tool-chip.on svg {
+  stroke: var(--accent);
+}
+
+.tool-chip:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.tools-open {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tools-open:empty {
+  display: none;
+}
+
+.tool-open {
+  position: relative;
+}
+
+.tool-open.hidden {
+  display: none;
+}
+
+.tool-close {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tool-close:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-soft);
+}
+
+.tool-open-body .card-title {
+  padding-right: 28px;
+}
+
+.tools-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 14px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.tools-note.hidden {
+  display: none;
+}
+
+.tool-arrange-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+}
+
+.tool-arrange-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.tools-parked {
+  display: none;
+}

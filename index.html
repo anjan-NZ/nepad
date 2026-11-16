@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/styles/today.css" />
+    <link rel="stylesheet" href="/src/styles/tools.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NePad</title>
     <script type="module" src="/src/main.ts" defer></script>
@@ -15,19 +17,19 @@
           <div id="ad-date" class="ad-date"></div>
         </div>
         <div class="day-nav">
-          <button id="day-prev" class="icon-btn" title="Previous day">&#8249;</button>
-          <button id="day-today" class="icon-btn" title="Today">&#9679;</button>
-          <button id="day-next" class="icon-btn" title="Next day">&#8250;</button>
+          <button id="day-prev" class="icon-btn" title="Previous day" aria-label="Previous day">&#8249;</button>
+          <button id="day-today" class="icon-btn" title="Today" aria-label="Go to today">&#9679;</button>
+          <button id="day-next" class="icon-btn" title="Next day" aria-label="Next day">&#8250;</button>
         </div>
         <nav class="tabs">
           <button class="tab-btn reorderable active" data-view="home" title="Drag to reorder">Notes</button>
           <button class="tab-btn reorderable" data-view="calendar" title="Drag to reorder">Calendar</button>
           <button class="tab-btn reorderable" data-view="tools" title="Drag to reorder">Tools</button>
-          <button class="tab-btn" data-view="settings">&#9881;</button>
+          <button class="tab-btn" data-view="settings" title="Settings" aria-label="Settings">&#9881;</button>
         </nav>
       </header>
 
-      <button id="hide-btn" class="icon-btn hide-btn-corner" title="Hide (Win + \)">&minus;</button>
+      <button id="hide-btn" class="icon-btn hide-btn-corner" title="Hide (Win + \)" aria-label="Hide panel">&minus;</button>
 
       <main id="view-root" class="view-root"></main>
     </div>
@@ -40,6 +42,8 @@
       <div class="reminder-toast-title">NePad reminder</div>
       <div id="reminder-toast-text" class="reminder-toast-text"></div>
       <div class="reminder-toast-actions">
+        <button type="button" id="reminder-toast-snooze10" class="reminder-toast-btn">10 min</button>
+        <button type="button" id="reminder-toast-snooze60" class="reminder-toast-btn">1 hr</button>
         <button type="button" id="reminder-toast-open" class="reminder-toast-btn">Open NePad</button>
         <button type="button" id="reminder-toast-dismiss" class="reminder-toast-btn">Dismiss</button>
       </div>

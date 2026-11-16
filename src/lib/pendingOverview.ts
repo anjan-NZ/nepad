@@ -1,5 +1,5 @@
 import { keyToDate } from "./dates";
-import { getOutstandingTasks, TaskStatus } from "./store";
+import { getOutstandingTasks, OutstandingTask, TaskStatus } from "./store";
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   pending: "Pending",
@@ -18,16 +18,19 @@ function formatShortDate(date: Date): string {
 export async function renderPendingOverview(
   root: HTMLElement,
   onJump: (date: Date) => void,
+  opts: { title?: string; filter?: (o: OutstandingTask) => boolean } = {},
 ): Promise<void> {
   root.innerHTML = `
     <section class="card pending-overview">
-      <h2 class="card-title">Pending Tasks</h2>
+      <h2 class="card-title"></h2>
       <div id="pending-list" class="pending-list"></div>
     </section>
   `;
 
   const list = root.querySelector<HTMLElement>("#pending-list")!;
-  const items = await getOutstandingTasks();
+  root.querySelector(".card-title")!.textContent = opts.title ?? "Pending Tasks";
+  const all = await getOutstandingTasks();
+  const items = opts.filter ? all.filter(opts.filter) : all;
 
   if (items.length === 0) {
     list.innerHTML = `<div class="pending-empty">Nothing outstanding. Nice.</div>`;

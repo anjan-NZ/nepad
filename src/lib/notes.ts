@@ -1,4 +1,5 @@
 import { DayData, saveDay } from "./store";
+import { flashSaved } from "./journal";
 
 let debounceTimer: number | undefined;
 
@@ -9,7 +10,7 @@ export function renderNotes(
 ): void {
   root.innerHTML = `
     <section class="card collapsible">
-      <button type="button" class="card-title collapse-toggle">Quick Notes <span class="chev">&#9662;</span></button>
+      <button type="button" class="card-title collapse-toggle">Quick Notes <span class="card-saved" role="status"></span><span class="chev">&#9662;</span></button>
       <textarea id="scratch-text" class="journal-text" placeholder="Jot something down..."></textarea>
     </section>
   `;
@@ -17,6 +18,7 @@ export function renderNotes(
   const card = root.querySelector<HTMLElement>(".card")!;
   const toggle = root.querySelector<HTMLButtonElement>(".collapse-toggle")!;
   const textarea = root.querySelector<HTMLTextAreaElement>("#scratch-text")!;
+  const saved = root.querySelector<HTMLElement>(".card-saved")!;
 
   textarea.value = day.notes;
 
@@ -27,6 +29,9 @@ export function renderNotes(
   textarea.addEventListener("input", () => {
     day.notes = textarea.value;
     window.clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(() => saveDay(dateKey, day), 400);
+    debounceTimer = window.setTimeout(async () => {
+      await saveDay(dateKey, day);
+      flashSaved(saved);
+    }, 400);
   });
 }

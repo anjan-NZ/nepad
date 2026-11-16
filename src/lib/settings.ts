@@ -27,6 +27,7 @@ export async function renderSettings(
         <input type="checkbox" id="set-autostart" />
       </label>
       <div class="setting-hint">Hotkey: <kbd>Win</kbd> + <kbd>\\</kbd></div>
+      <div class="setting-hint">Esc: hide &nbsp;|&nbsp; Ctrl+1/2/3: tabs &nbsp;|&nbsp; Ctrl+comma: settings</div>
       <label class="setting-row">
         <span>Show edge strip (drag to reposition)</span>
         <input type="checkbox" id="set-edge-strip" />

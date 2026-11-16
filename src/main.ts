@@ -2,7 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { adKey, formatAD, formatBS, shiftDay } from "./lib/dates";
 import {
+  addReminder,
   getDayWithCarryOver,
+  getOutstandingTasks,
+  OutstandingTask,
   getReminders,
   markReminderNotified,
   setSetting,
@@ -15,6 +18,7 @@ import { renderSettings, getStartupSettings } from "./lib/settings";
 import { renderCalendar } from "./lib/calendar";
 import { renderPendingOverview } from "./lib/pendingOverview";
 import { renderReminders } from "./lib/reminders";
+import { loadFoldState, makeFold, wordSummary } from "./lib/todayFold";
 import { enableDragReorder } from "./lib/dragReorder";
 import { initEdgeStrip } from "./lib/edgeStrip";
 import { initReminderToast } from "./lib/reminderToast";
@@ -54,6 +58,9 @@ if (!import.meta.env.DEV) {
     }
   });
 }
+
+let updateToastAt = 0;
+const UPDATE_TOAST_WINDOW_MS = 35000;
 
 interface Rect {
   x: number;
@@ -142,23 +149,85 @@ function renderHeader(): string {
 async function renderHome() {
   const dateKey = renderHeader();
   const day = await getDayWithCarryOver(dateKey);
+  await loadFoldState();
+
+  const isEarlier = (o: OutstandingTask) =>
+    o.dateKey !== dateKey && !day.tasks.some((t) => t.id === o.task.id);
+  const earlierCount = async () => (await getOutstandingTasks()).filter(isEarlier).length;
+  const upcoming = async () =>
+    (await getReminders()).filter((r) => !r.notified).sort((a, b) => a.datetime - b.datetime);
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   viewRoot.innerHTML = "";
-  const tasksRoot = document.createElement("div");
-  const remindersRoot = document.createElement("div");
-  const journalRoot = document.createElement("div");
-  const notesRoot = document.createElement("div");
-  const pendingRoot = document.createElement("div");
-  viewRoot.append(tasksRoot, journalRoot, notesRoot, remindersRoot, pendingRoot);
 
-  renderTasks(tasksRoot, dateKey, day, () => {});
-  void renderReminders(remindersRoot);
-  renderJournal(journalRoot, dateKey, day);
-  renderNotes(notesRoot, dateKey, day);
-  void renderPendingOverview(pendingRoot, (date) => {
-    currentDate = date;
-    renderActiveView();
+  const strip = document.createElement("div");
+  strip.className = "today-strip";
+  strip.innerHTML = `
+    <div class="today-stat"><b id="stat-open">0</b><span>open today</span></div>
+    <div class="today-stat"><b id="stat-earlier">0</b><span>from earlier</span></div>
+    <div class="today-stat"><b id="stat-reminders">0</b><span>reminders</span></div>
+  `;
+  const statOpen = strip.querySelector<HTMLElement>("#stat-open")!;
+  const statEarlier = strip.querySelector<HTMLElement>("#stat-earlier")!;
+  const statReminders = strip.querySelector<HTMLElement>("#stat-reminders")!;
+
+  const tasksRoot = document.createElement("div");
+
+  const earlier = makeFold("earlier", "From earlier days", async () =>
+    plural(await earlierCount(), "task"),
+  );
+  const reminders = makeFold(
+    "reminders",
+    "Reminders",
+    async () => {
+      const next = (await upcoming())[0];
+      if (!next) return "none";
+      const time = new Date(next.datetime).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      return `${time}, ${next.text}`;
+    },
+    () => void refreshStats(),
+  );
+  const notes = makeFold("notes", "Quick Notes", () => wordSummary(day.notes));
+  const journal = makeFold("journal", "Journal", () => wordSummary(day.journal));
+
+  async function refreshStats() {
+    statOpen.textContent = String(day.tasks.filter((t) => t.status !== "completed").length);
+    const n = await earlierCount();
+    statEarlier.textContent = String(n);
+    earlier.el.classList.toggle("hidden", n === 0);
+    statReminders.textContent = String((await upcoming()).length);
+    earlier.refresh();
+    reminders.refresh();
+  }
+
+  const drawEarlier = () =>
+    renderPendingOverview(
+      earlier.body,
+      (date) => {
+        currentDate = date;
+        renderActiveView();
+      },
+      { title: "From earlier days", filter: isEarlier },
+    );
+
+  viewRoot.append(strip, tasksRoot, earlier.el, reminders.el, notes.el, journal.el);
+
+  renderTasks(tasksRoot, dateKey, day, () => {
+    void drawEarlier();
+    void refreshStats();
   });
+  void drawEarlier();
+  void renderReminders(reminders.body);
+  new MutationObserver(() => void refreshStats()).observe(reminders.body, {
+    childList: true,
+    subtree: true,
+  });
+  renderNotes(notes.body, dateKey, day);
+  renderJournal(journal.body, dateKey, day);
+  void refreshStats();
 }
 
 function renderActiveView() {
@@ -246,6 +315,36 @@ async function checkForUpdateOnLaunch() {
   await invoke("show_reminder_toast", {
     text: `Update available: v${update.version}. Open Settings to install.`,
   });
+  updateToastAt = Date.now();
+}
+
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  return el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
+}
+
+function setupKeyboard() {
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (isTypingTarget(e.target) || e.defaultPrevented) return;
+      void invoke("toggle_panel");
+      return;
+    }
+    if (!e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
+    if (e.key === "," ) {
+      e.preventDefault();
+      setView("settings");
+      return;
+    }
+    if (e.key >= "1" && e.key <= "3") {
+      const tabs = document.querySelectorAll<HTMLElement>(".tabs .tab-btn.reorderable");
+      const btn = tabs[Number(e.key) - 1];
+      if (btn?.dataset.view) {
+        e.preventDefault();
+        setView(btn.dataset.view as ViewName);
+      }
+    }
+  });
 }
 
 async function bootstrap() {
@@ -256,7 +355,19 @@ async function bootstrap() {
 
   initialRect = await ensureOffscreenStart();
 
-  await listen("nepad:slide-in", () => slideIn());
+  await listen("nepad:slide-in", async () => {
+    if (updateToastAt && Date.now() - updateToastAt < UPDATE_TOAST_WINDOW_MS) {
+      setView("settings");
+    }
+    updateToastAt = 0;
+    await slideIn();
+  });
+  await listen<{ text: string; minutes: number }>("nepad:reminder-snooze", (event) => {
+    const { text, minutes } = event.payload;
+    if (!text || !(minutes > 0)) return;
+    void addReminder(text, Date.now() + minutes * 60000);
+  });
+  setupKeyboard();
   await listen("nepad:slide-out", () => slideOut());
   await listen("nepad:open-settings", () => setView("settings"));
 

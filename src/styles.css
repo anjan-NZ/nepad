@@ -10,6 +10,11 @@
   --accent-soft: rgba(158, 166, 255, 0.20);
   --danger: #ff8080;
   --success: #5fe08e;
+  --success-soft: rgba(95, 217, 122, 0.15);
+  --success-border: rgba(95, 217, 122, 0.5);
+  --warn: #f4c430;
+  --warn-soft: rgba(244, 196, 48, 0.15);
+  --warn-border: rgba(244, 196, 48, 0.5);
   color-scheme: dark;
 
   font-family: "Segoe UI", Inter, Avenir, Helvetica, Arial, sans-serif;
@@ -30,6 +35,11 @@
     --accent-soft: rgba(15, 76, 129, 0.12);
     --danger: #B91C1C;
     --success: #15803D;
+    --success-soft: rgba(21, 128, 61, 0.12);
+    --success-border: rgba(21, 128, 61, 0.45);
+    --warn: #92400E;
+    --warn-soft: rgba(146, 64, 14, 0.12);
+    --warn-border: rgba(146, 64, 14, 0.45);
     color-scheme: light;
   }
 }
@@ -507,15 +517,15 @@ body.is-timer-toast .timer-toast:hover {
 }
 
 .status-in-progress .status-badge {
-  background: rgba(244, 196, 48, 0.15);
-  color: #f4c430;
-  border-color: rgba(244, 196, 48, 0.5);
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: var(--warn-border);
 }
 
 .status-completed .status-badge {
-  background: rgba(95, 217, 122, 0.15);
-  color: #5fd97a;
-  border-color: rgba(95, 217, 122, 0.5);
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: var(--success-border);
 }
 
 .task-body {
@@ -1126,7 +1136,7 @@ body.is-timer-toast .timer-toast:hover {
 }
 
 .cal-cell.holiday .cal-day {
-  color: #f4c430;
+  color: var(--warn);
 }
 
 .cal-month-holidays {
@@ -1148,7 +1158,7 @@ body.is-timer-toast .timer-toast:hover {
 }
 
 .cal-month-holiday-row span:first-child {
-  color: #f4c430;
+  color: var(--warn);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1161,7 +1171,7 @@ body.is-timer-toast .timer-toast:hover {
 .cal-detail-holiday {
   font-size: 13px;
   font-weight: 600;
-  color: #f4c430;
+  color: var(--warn);
   padding: 0 2px 6px;
 }
 
@@ -1197,7 +1207,7 @@ body.is-timer-toast .timer-toast:hover {
 
 .pan-hint {
   font-size: 12px;
-  color: #b7bbd6;
+  color: var(--text-dim);
   margin: 0 0 12px;
   line-height: 1.45;
 }
@@ -1862,8 +1872,8 @@ body.is-timer-toast .timer-toast {
   text-align: center;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(244, 196, 48, 0.18);
-  color: #f4c430;
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .cal-month-holiday-row {
@@ -1881,7 +1891,7 @@ body.is-timer-toast .timer-toast {
   flex-direction: column;
   align-items: center;
   min-width: 46px;
-  color: #f4c430;
+  color: var(--warn);
   font-size: 9px;
   font-weight: 600;
   line-height: 1.1;
@@ -1954,8 +1964,8 @@ body.is-timer-toast .timer-toast {
   text-transform: uppercase;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(244, 196, 48, 0.22);
-  color: #f4c430;
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .cal-month-holiday-row .hol-day {
@@ -2076,5 +2086,37 @@ select option:disabled {
 
   select option:disabled {
     color: #94A3B8;
+  }
+}
+
+button:focus-visible,
+[role="radio"]:focus-visible,
+summary:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cal-cell:focus-visible,
+.tab-btn:focus-visible,
+.pending-row:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (prefers-color-scheme: light) {
+  .dot-tasks { background: var(--success); color: var(--success); }
+  .dot-notes { background: #64748B; color: #64748B; }
+  .dot-journal { background: #BE185D; color: #BE185D; }
+  .dot-holiday { background: var(--warn); color: var(--warn); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
 }

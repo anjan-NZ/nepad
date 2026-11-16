@@ -28,6 +28,8 @@ export interface Settings {
   timerToastPos: { x: number; y: number } | null;
   theme: "dark" | "light";
   glassStrength: "clear" | "balanced" | "frosted";
+  todayFolded: string[];
+  toolsClosed: string[];
 }
 
 export interface Reminder {
@@ -49,6 +51,8 @@ const DEFAULT_SETTINGS: Settings = {
   timerToastPos: null,
   theme: "dark",
   glassStrength: "frosted",
+  todayFolded: [],
+  toolsClosed: [],
 };
 
 const EMPTY_DAY: DayData = { tasks: [], journal: "", notes: "" };
@@ -184,16 +188,18 @@ export interface OutstandingTask {
 export async function getOutstandingTasks(): Promise<OutstandingTask[]> {
   const store = await days();
   const keys = (await store.keys()).sort();
-  const result: OutstandingTask[] = [];
+  const latest = new Map<string, OutstandingTask>();
   for (const key of keys) {
     const data = await store.get<DayData>(key);
     if (!data) continue;
     for (const task of (data.tasks ?? []).map(normalizeTask)) {
-      if (task.status !== "completed") {
-        result.push({ dateKey: key, task });
-      }
+      latest.set(task.id, { dateKey: key, task });
     }
   }
+  const result = [...latest.values()].filter((o) => o.task.status !== "completed");
+  result.sort((a, b) =>
+    a.dateKey < b.dateKey ? -1 : a.dateKey > b.dateKey ? 1 : a.task.createdAt - b.task.createdAt,
+  );
   return result;
 }
 

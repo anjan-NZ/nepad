@@ -1,0 +1,135 @@
+.card-saved {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.card-saved:empty {
+  display: none;
+}
+
+.collapse-toggle .card-saved {
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.reminder-toast-actions {
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.reminder-toast-btn {
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.today-strip {
+  display: flex;
+  gap: 8px;
+}
+
+.today-stat {
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.today-stat b {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.today-stat span {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.fold.hidden {
+  display: none;
+}
+
+.fold-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 16px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fold-row::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px 1px var(--accent);
+  flex-shrink: 0;
+}
+
+.fold-row:hover {
+  border-color: var(--accent);
+}
+
+.fold-title {
+  flex-shrink: 0;
+}
+
+.fold-sum {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.fold-chev {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.fold-body {
+  display: none;
+}
+
+.fold.open .fold-row {
+  display: none;
+}
+
+.fold.open .fold-body {
+  display: block;
+}
+
+.fold-body .card-title {
+  cursor: pointer;
+}
+
+.fold-body h2.card-title::after {
+  content: "\25B4";
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.fold-body .collapse-toggle .chev {
+  transform: rotate(180deg);
+}
