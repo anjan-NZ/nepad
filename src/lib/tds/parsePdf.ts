@@ -143,8 +143,13 @@ export async function parseTdsPdf(bytes: Uint8Array, sourceFile: string): Promis
 
     for (const w of row) {
       const conv = devToArabic(w.text);
+      const spaced = /^\d+(?: \d+)+$/.test(conv) ? conv.split(" ") : null;
       if (w.text === "BS" || w.text === "AD") {
         dateType = w.text;
+      } else if (spaced && spaced.length === 3 && /^\d{4}$/.test(spaced[0]) && spaced[1].length === 2 && spaced[2].length === 2) {
+        date = `${spaced[0]}.${spaced[1]}.${spaced[2]}`;
+      } else if (spaced && spaced[spaced.length - 1].length === 2) {
+        amounts.push({ x: w.x, val: `${spaced.slice(0, -1).join("")}.${spaced[spaced.length - 1]}` });
       } else if (/^\d{4}\.\d{1,2}\.\d{1,2}$/.test(conv)) {
         date = conv;
       } else if (/^[\d,]+\.\d{2}$/.test(conv)) {
